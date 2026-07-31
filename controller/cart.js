@@ -106,6 +106,50 @@ module.exports.editCart = (req, res) => {
 	}
 };
 
+module.exports.deleteCartProduct = (req, res) => {
+	if (req.params.id == null || req.params.productId == null) {
+		res.status(400).json({
+			status: 'error',
+			message: 'cart id and product id should be provided',
+		});
+	} else {
+		const cartId = req.params.id;
+		const productId = Number(req.params.productId);
+
+		Cart.findOne({ id: cartId })
+			.then((cart) => {
+				if (!cart) {
+					res.status(404).json({
+						status: 'error',
+						message: 'cart not found',
+					});
+					return null;
+				}
+				const product = cart.products.find((p) => p.productId === productId);
+				if (!product) {
+					res.status(404).json({
+						status: 'error',
+						message: 'product not found in cart',
+					});
+					return null;
+				}
+				cart.products = cart.products.filter((p) => p.productId !== productId);
+				return cart.save();
+			})
+			.then((cart) => {
+				if (cart) {
+					const cartObj = cart.toObject();
+					delete cartObj._id;
+					cartObj.products = cartObj.products.map(({ _id, ...p }) => p);
+					res.json(cartObj);
+				}
+			})
+			.catch((err) => {
+				res.status(500).json({ status: 'error', message: err.message });
+			});
+	}
+};
+
 module.exports.deleteCart = (req, res) => {
 	if (req.params.id == null) {
 		res.json({

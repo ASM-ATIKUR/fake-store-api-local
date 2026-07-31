@@ -222,6 +222,7 @@ PUT,PATCH:
 DELETE:
 
 - /carts/1
+- /carts/1/products/1 (delete a specific product from a cart)
 
 ### Users
 

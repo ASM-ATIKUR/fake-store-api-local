@@ -271,6 +271,34 @@
 
 
 
+<h3 id="c-delete-product">Delete a product from a cart</h3>
+<pre><code>fetch('<span class="c-api">https://fakestoreapi.com/carts/6/products/2'</span>,{
+            method:"DELETE"
+        })
+            .then(res=>res.json())
+            .then(json=>console.log(json))</code></pre>
+<p>
+    <span class="tips">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            class="feather feather-zap">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+        </svg>
+    </span>The product with the given id will be removed from the cart. The product will not be deleted from the
+    database. but if you sent data successfully it will return you the updated cart.
+</p>
+<button class="show-output btn btn-outline">Show output</button>
+<pre class="output-result"><code>
+            <span class="c-comment">//output</span>
+            {
+                id:6,
+                userId:...,
+                date:...,
+                products:[{productId:1,quantity:5}]
+            }
+        </code></pre>
+
+
 <h3 id="c-delete">Delete a cart</h3>
 <pre><code>fetch('<span class="c-api">https://fakestoreapi.com/carts/6'</span>,{
             method:"DELETE"

@@ -11,6 +11,7 @@ router.post('/',cart.addCart)
 
 router.put('/:id',cart.editCart)
 router.patch('/:id',cart.editCart)
+router.delete('/:id/products/:productId',cart.deleteCartProduct)
 router.delete('/:id',cart.deleteCart)
 
 module.exports = router

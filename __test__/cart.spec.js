@@ -94,6 +94,14 @@ describe('testing cart API',()=>{
     })
 
 
+    it('delete a product from a cart',async () => {
+        const response = await supertest(app).delete('/carts/3/products/1')
+        expect(response.status).toBe(200);
+        console.log(response.body)
+        expect(response.body).toHaveProperty('id');
+        expect(response.body.products).not.toContainEqual(expect.objectContaining({productId:1}));
+    })
+
     it('delete a cart',async () => {
         const response = await supertest(app).delete('/carts/2')
         expect(response.status).toBe(200);
