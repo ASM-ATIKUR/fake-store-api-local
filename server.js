@@ -5,6 +5,10 @@ const cors = require('cors');
 const path = require('path');
 const dotenv = require('dotenv');
 const dotenvExpand = require('dotenv-expand');
+const fs = require('fs');
+if (fs.existsSync('.env.local')) {
+	dotenvExpand.expand(dotenv.config({ path: '.env.local' }));
+}
 const myEnv = dotenv.config();
 dotenvExpand.expand(myEnv);
 
