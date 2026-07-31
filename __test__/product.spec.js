@@ -76,7 +76,7 @@ describe("Testing products API", () => {
 
 
     it('delete a product', async () => {
-        const response = await supertest(app).put('/products/1')
+        const response = await supertest(app).delete('/products/1')
         expect(response.status).toBe(200)
         console.log('delete', response.body)
         expect(response.body).toHaveProperty('id')

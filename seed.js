@@ -22,7 +22,9 @@ async function fetchJson(path) {
 	return res.json();
 }
 
-async function seed() {
+async function seedDatabase() {
+	mongoose.set('useFindAndModify', false);
+	mongoose.set('useUnifiedTopology', true);
 	await mongoose.connect(process.env.DATABASE_URL, { useNewUrlParser: true });
 
 	console.log('clearing collections...');
@@ -37,19 +39,26 @@ async function seed() {
 	console.log('fetching users...');
 	await User.insertMany(await fetchJson('/users'));
 
-	const [products, carts, users] = await Promise.all([
-		Product.countDocuments(),
-		Cart.countDocuments(),
-		User.countDocuments(),
-	]);
-	console.log(`done. products=${products} carts=${carts} users=${users}`);
+	const counts = {
+		products: await Product.countDocuments(),
+		carts: await Cart.countDocuments(),
+		users: await User.countDocuments(),
+	};
 
 	await mongoose.disconnect();
+	return counts;
 }
 
-seed()
-	.then(() => process.exit(0))
-	.catch((err) => {
-		console.error(err);
-		process.exit(1);
-	});
+if (require.main === module) {
+	seedDatabase()
+		.then((counts) => {
+			console.log(`done. products=${counts.products} carts=${counts.carts} users=${counts.users}`);
+			process.exit(0);
+		})
+		.catch((err) => {
+			console.error(err);
+			process.exit(1);
+		});
+}
+
+module.exports = { seedDatabase };
