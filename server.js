@@ -18,7 +18,7 @@ mongoose
 	.connect(process.env.DATABASE_URL, { useNewUrlParser: true })
 	.then(() => {
 		app.listen(port, () => {
-			console.log('connect');
+			console.log(`Server running at http://localhost:${port}`);
 		});
 	})
 	.catch((err) => {
