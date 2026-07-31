@@ -62,7 +62,7 @@ fetch("https://fakestoreapi.com/products", {
 
 /* will return
 {
- id:31,
+ id:21,
  title:'...',
  price:'...',
  category:'...',
@@ -72,7 +72,7 @@ fetch("https://fakestoreapi.com/products", {
 */
 ```
 
-Note: Posted data will not really insert into the database and just return a fake id.
+Note: Posted data will really insert into the database.
 
 ### Updating a product
 
@@ -128,7 +128,7 @@ fetch("https://fakestoreapi.com/products/8", {
 */
 ```
 
-Note: Edited data will not really be updated into the database.
+Note: Edited data will really be updated into the database.
 
 ### Deleting a product
 
@@ -138,7 +138,7 @@ fetch("https://fakestoreapi.com/products/8", {
 });
 ```
 
-Nothing will delete on the database.
+The product will really be deleted from the database.
 
 ### Sort and Limit
 

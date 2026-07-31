@@ -1,4 +1,6 @@
 const Cart = require('../model/cart');
+const nextId = require('../util/id');
+const toDotPaths = require('../util/flatten');
 
 module.exports.getAllCarts = (req, res) => {
 	const limit = Number(req.query.limit) || 0;
@@ -48,48 +50,59 @@ module.exports.getSingleCart = (req, res) => {
 };
 
 module.exports.addCart = (req, res) => {
-	if (typeof req.body == undefined) {
+	if (!req.body || !req.body.userId || !req.body.products) {
 		res.json({
 			status: 'error',
 			message: 'data is undefined',
 		});
 	} else {
-		//     let cartCount = 0;
-		// Cart.find().countDocuments(function (err, count) {
-		//   cartCount = count
-		//   })
-
-		//     .then(() => {
-		const cart = {
-			id: 11,
-			userId: req.body.userId,
-			date: req.body.date,
-			products: req.body.products,
-		};
-		// cart.save()
-		//   .then(cart => res.json(cart))
-		//   .catch(err => console.log(err))
-
-		res.json(cart);
-		// })
-
-		//res.json({...req.body,id:Cart.find().count()+1})
+		nextId(Cart)
+			.then((id) =>
+				new Cart({
+					id,
+					userId: req.body.userId,
+					date: req.body.date || new Date(),
+					products: req.body.products,
+				}).save()
+			)
+			.then((cart) => {
+				const cartObj = cart.toObject();
+				delete cartObj._id;
+				cartObj.products = cartObj.products.map(({ _id, ...p }) => p);
+				res.json(cartObj);
+			})
+			.catch((err) =>
+				res.status(err.name === 'ValidationError' ? 400 : 500).json({
+					status: 'error',
+					message: err.message,
+				})
+			);
 	}
 };
 
 module.exports.editCart = (req, res) => {
-	if (typeof req.body == undefined || req.params.id == null) {
+	if (!req.body || req.params.id == null) {
 		res.json({
 			status: 'error',
 			message: 'something went wrong! check your sent data',
 		});
 	} else {
-		res.json({
-			id: parseInt(req.params.id),
-			userId: req.body.userId,
-			date: req.body.date,
-			products: req.body.products,
-		});
+		delete req.body.id;
+		Cart.findOneAndUpdate({ id: req.params.id }, toDotPaths(req.body), { new: true })
+			.select('-_id -products._id')
+			.then((cart) => {
+				if (cart) {
+					res.json(cart);
+				} else {
+					res.status(404).json({
+						status: 'error',
+						message: 'cart not found',
+					});
+				}
+			})
+			.catch((err) => {
+				res.status(500).json({ status: 'error', message: err.message });
+			});
 	}
 };
 
@@ -100,11 +113,20 @@ module.exports.deleteCart = (req, res) => {
 			message: 'cart id should be provided',
 		});
 	} else {
-		Cart.findOne({ id: req.params.id })
+		Cart.findOneAndDelete({ id: req.params.id })
 			.select('-_id -products._id')
 			.then((cart) => {
-				res.json(cart);
+				if (cart) {
+					res.json(cart);
+				} else {
+					res.status(404).json({
+						status: 'error',
+						message: 'cart not found',
+					});
+				}
 			})
-			.catch((err) => console.log(err));
+			.catch((err) => {
+				res.status(500).json({ status: 'error', message: err.message });
+			});
 	}
 };

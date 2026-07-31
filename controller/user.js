@@ -1,4 +1,6 @@
 const User = require('../model/user');
+const nextId = require('../util/id');
+const toDotPaths = require('../util/flatten');
 
 module.exports.getAllUser = (req, res) => {
 	const limit = Number(req.query.limit) || 0;
@@ -30,78 +32,74 @@ module.exports.getUser = (req, res) => {
 };
 
 module.exports.addUser = (req, res) => {
-	if (typeof req.body == undefined) {
+	if (!req.body || !req.body.email || !req.body.username || !req.body.password) {
 		res.json({
 			status: 'error',
 			message: 'data is undefined',
 		});
 	} else {
-		let userCount = 0;
-		User.find()
-			.countDocuments(function (err, count) {
-				userCount = count;
-			})
-			.then(() => {
-				const user = new User({
-					id: userCount + 1,
+		const name = req.body.name || {};
+		const address = req.body.address || {};
+		nextId(User)
+			.then((id) =>
+				new User({
+					id,
 					email: req.body.email,
 					username: req.body.username,
 					password: req.body.password,
 					name: {
-						firstname: req.body.firstname,
-						lastname: req.body.lastname,
+						firstname: name.firstname,
+						lastname: name.lastname,
 					},
 					address: {
-						city: req.body.address.city,
-						street: req.body.address.street,
-						number: req.body.number,
-						zipcode: req.body.zipcode,
+						city: address.city,
+						street: address.street,
+						number: address.number,
+						zipcode: address.zipcode,
 						geolocation: {
-							lat: req.body.address.geolocation.lat,
-							long: req.body.address.geolocation.long,
+							lat: (address.geolocation || {}).lat,
+							long: (address.geolocation || {}).long,
 						},
 					},
 					phone: req.body.phone,
-				});
-				// user.save()
-				//   .then(user => res.json(user))
-				//   .catch(err => console.log(err))
-
-				res.json(user);
-			});
-
-		//res.json({id:User.find().count()+1,...req.body})
+				}).save()
+			)
+			.then((user) => {
+				const { _id, ...rest } = user.toObject();
+				res.json(rest);
+			})
+			.catch((err) =>
+				res.status(err.name === 'ValidationError' ? 400 : 500).json({
+					status: 'error',
+					message: err.message,
+				})
+			);
 	}
 };
 
 module.exports.editUser = (req, res) => {
-	if (typeof req.body == undefined || req.params.id == null) {
+	if (!req.body || req.params.id == null) {
 		res.json({
 			status: 'error',
 			message: 'something went wrong! check your sent data',
 		});
 	} else {
-		res.json({
-			id: parseInt(req.params.id),
-			email: req.body.email,
-			username: req.body.username,
-			password: req.body.password,
-			name: {
-				firstname: req.body.firstname,
-				lastname: req.body.lastname,
-			},
-			address: {
-				city: req.body.address.city,
-				street: req.body.address.street,
-				number: req.body.number,
-				zipcode: req.body.zipcode,
-				geolocation: {
-					lat: req.body.address.geolocation.lat,
-					long: req.body.address.geolocation.long,
-				},
-			},
-			phone: req.body.phone,
-		});
+		delete req.body.id;
+		User.findOneAndUpdate({ id: req.params.id }, toDotPaths(req.body), { new: true })
+			.select('-_id')
+			.then((user) => {
+				if (user) {
+					res.json(user);
+				} else {
+					res.status(404).json({
+						status: 'error',
+						message: 'user not found',
+					});
+				}
+			})
+			.catch((err) => {
+				res.status(500).json({ status: 'error', message: err.message });
+			});
 	}
 };
 
@@ -112,11 +110,20 @@ module.exports.deleteUser = (req, res) => {
 			message: 'cart id should be provided',
 		});
 	} else {
-		User.findOne({ id: req.params.id })
-			.select(['-_id'])
+		User.findOneAndDelete({ id: req.params.id })
+			.select('-_id')
 			.then((user) => {
-				res.json(user);
+				if (user) {
+					res.json(user);
+				} else {
+					res.status(404).json({
+						status: 'error',
+						message: 'user not found',
+					});
+				}
 			})
-			.catch((err) => console.log(err));
+			.catch((err) => {
+				res.status(500).json({ status: 'error', message: err.message });
+			});
 	}
 };
