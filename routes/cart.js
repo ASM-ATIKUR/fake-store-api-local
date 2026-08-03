@@ -1,6 +1,10 @@
 const express = require('express')
 const router = express.Router()
 const cart = require('../controller/cart')
+const { authenticate } = require('../util/auth')
+
+// every cart route is private: carts are per-user data
+router.use(authenticate)
 
 router.get('/',cart.getAllCarts)
 router.get('/:id',cart.getSingleCart)

@@ -1,6 +1,7 @@
 const User = require('../model/user');
 const nextId = require('../util/id');
 const toDotPaths = require('../util/flatten');
+const { isOwnerOrAdmin, forbidden } = require('../util/auth');
 
 module.exports.getAllUser = (req, res) => {
 	const limit = Number(req.query.limit) || 0;
@@ -83,8 +84,14 @@ module.exports.editUser = (req, res) => {
 			status: 'error',
 			message: 'something went wrong! check your sent data',
 		});
+	} else if (!isOwnerOrAdmin(req, req.params.id)) {
+		forbidden(res, 'you can only modify your own account');
 	} else {
 		delete req.body.id;
+		// only an admin may change roles, otherwise anyone could promote themselves
+		if (req.user.role !== 'admin') {
+			delete req.body.role;
+		}
 		User.findOneAndUpdate({ id: req.params.id }, toDotPaths(req.body), { new: true })
 			.select('-_id')
 			.then((user) => {
@@ -107,8 +114,10 @@ module.exports.deleteUser = (req, res) => {
 	if (req.params.id == null) {
 		res.json({
 			status: 'error',
-			message: 'cart id should be provided',
+			message: 'user id should be provided',
 		});
+	} else if (!isOwnerOrAdmin(req, req.params.id)) {
+		forbidden(res, 'you can only delete your own account');
 	} else {
 		User.findOneAndDelete({ id: req.params.id })
 			.select('-_id')

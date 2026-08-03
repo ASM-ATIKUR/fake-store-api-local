@@ -24,6 +24,38 @@ There are 4 main resources need in shopping prototypes:
 
 ### New! "Rating" (includes rate and count) has been added to each product object!
 
+## Authentication
+
+Unlike the hosted FakeStoreAPI, this local copy enforces the token it hands out. Log in at
+`POST /auth/login` and send the token on protected routes:
+
+```js
+const { token } = await fetch("/auth/login", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ username: "johnd", password: "m38rmF$" }),
+}).then((res) => res.json());
+
+fetch("/carts", { headers: { Authorization: `Bearer ${token}` } });
+```
+
+Who can do what:
+
+| Routes                                        | Access                                                        |
+| --------------------------------------------- | ------------------------------------------------------------- |
+| `GET /products/*`, `GET /users/*`, docs pages | public                                                        |
+| `POST /users` (signup), `POST /auth/login`    | public                                                        |
+| `POST/PUT/PATCH/DELETE /products`             | **admin** only                                                |
+| all `/carts` routes                           | any logged-in user, limited to **their own** carts; admin sees all |
+| `PUT/PATCH/DELETE /users/:id`                 | the **owner** of that account, or an admin                    |
+
+Missing or invalid token → `401`. Valid token without the right privileges → `403`.
+A self-registered account is always created as a `customer`; only an admin can set `role`.
+
+`npm run seed` creates exactly two accounts: `johnd` / `m38rmF$` (id 1, **admin**) and
+`kevinryan` / `kev02937@` (id 3, **customer**). Sign up with `POST /users` for more.
+The signing secret comes from `JWT_SECRET` in `.env`.
+
 ## How to
 
 you can fetch data with any kind of methods you know(fetch API, Axios, jquery ajax,...)
@@ -283,6 +315,9 @@ fields:
 POST:
 
 - /auth/login
+
+Returns `{ token }`. The payload carries `id`, `user` (username) and `role`.
+See [Authentication](#authentication) for which routes require it.
 
 ## ToDo
 

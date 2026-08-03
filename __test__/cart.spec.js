@@ -1,9 +1,19 @@
 const supertest = require('supertest')
 const app = require('../app')
+const { loginAdmin } = require('./helpers/login')
 
+// every cart route requires a token; these run as admin so they can reach
+// carts belonging to any user. Ownership rules are covered in authorization.spec.js
 describe('testing cart API',()=>{
+    let token
+    const auth = (request) => request.set('Authorization', `Bearer ${token}`)
+
+    beforeAll(async () => {
+        token = await loginAdmin()
+    }, 30000)
+
     it('get all carts',async()=>{
-        const response = await supertest(app).get('/carts')
+        const response = await auth(supertest(app).get('/carts'))
         expect(response.status).toBe(200)
         console.log(response.body)
         expect(response.body).not.toEqual([]);
@@ -11,7 +21,7 @@ describe('testing cart API',()=>{
 
 
     it('get a single cart',async ()=>{
-        const response = await supertest(app).get('/carts/2')
+        const response = await auth(supertest(app).get('/carts/2'))
         expect(response.status).toBe(200);
         console.log(response.body)
         expect(response.body).not.toEqual({});
@@ -20,7 +30,7 @@ describe('testing cart API',()=>{
     })
 
     it("get carts in a date range and limit and sort", async () => {
-        const response = await supertest(app).get("/carts?limit=2&sort=desc&startdate=2019-12-10&enddate=2020-10-10")
+        const response = await auth(supertest(app).get("/carts?limit=2&sort=desc&startdate=2019-12-10&enddate=2020-10-10"))
         expect(response.status).toBe(200)
         console.log('get with querystring', response.body)
         expect(response.body).not.toEqual([])
@@ -30,28 +40,28 @@ describe('testing cart API',()=>{
 
 
     it("get carts in for user in date range", async () => {
-        const response = await supertest(app).get("/carts/user/1?startdate=2019-12-10&enddate=2020-10-10")
+        const response = await auth(supertest(app).get("/carts/user/1?startdate=2019-12-10&enddate=2020-10-10"))
         expect(response.status).toBe(200)
         console.log('get with date range', response.body)
         expect(response.body).not.toEqual([])
     })
 
     it("get carts in for user without start date", async () => {
-        const response = await supertest(app).get("/carts/user/1?enddate=2020-10-10")
+        const response = await auth(supertest(app).get("/carts/user/1?enddate=2020-10-10"))
         expect(response.status).toBe(200)
         console.log('get user cart without start date', response.body)
         expect(response.body).not.toEqual([])
     })
 
     it("get carts in for user without end date", async () => {
-        const response = await supertest(app).get("/carts/user/1?startdate=2019-12-10")
+        const response = await auth(supertest(app).get("/carts/user/1?startdate=2019-12-10"))
         expect(response.status).toBe(200)
         console.log('get user cart without end date', response.body)
         expect(response.body).not.toEqual([])
     })
 
     it("get carts in for user", async () => {
-        const response = await supertest(app).get("/carts/user/1")
+        const response = await auth(supertest(app).get("/carts/user/1"))
         expect(response.status).toBe(200)
         console.log('get with userid', response.body)
         expect(response.body).not.toEqual([])
@@ -59,7 +69,7 @@ describe('testing cart API',()=>{
 
 
     it('add a new cart',async () => {
-        const response = await supertest(app).post('/carts').send({
+        const response = await auth(supertest(app).post('/carts')).send({
             userId:1,
             date:new Date('2020-10-10'),
             products:[{productId:2,quantity:4},{productId:1,quantity:10},{productId:5,quantity:2}]
@@ -71,7 +81,7 @@ describe('testing cart API',()=>{
 
 
     it('edit a cart',async () => {
-        const response = await supertest(app).put('/carts/2').send({
+        const response = await auth(supertest(app).put('/carts/2')).send({
             userId:1,
             date:new Date('2020-10-10'),
             products:[{productId:2,quantity:4},{productId:1,quantity:10},{productId:5,quantity:2}]
@@ -83,7 +93,7 @@ describe('testing cart API',()=>{
 
 
     it('edit a cart',async () => {
-        const response = await supertest(app).patch('/carts/2').send({
+        const response = await auth(supertest(app).patch('/carts/2')).send({
             userId:1,
             date:new Date('2020-10-10'),
             products:[{productId:2,quantity:4},{productId:1,quantity:10},{productId:5,quantity:2}]
@@ -95,7 +105,7 @@ describe('testing cart API',()=>{
 
 
     it('delete a product from a cart',async () => {
-        const response = await supertest(app).delete('/carts/3/products/1')
+        const response = await auth(supertest(app).delete('/carts/3/products/1'))
         expect(response.status).toBe(200);
         console.log(response.body)
         expect(response.body).toHaveProperty('id');
@@ -103,10 +113,10 @@ describe('testing cart API',()=>{
     })
 
     it('delete a cart',async () => {
-        const response = await supertest(app).delete('/carts/2')
+        const response = await auth(supertest(app).delete('/carts/2'))
         expect(response.status).toBe(200);
         console.log(response.body)
         expect(response.body).toHaveProperty('id');
     })
-   
+
 })

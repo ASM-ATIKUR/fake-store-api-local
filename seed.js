@@ -14,6 +14,10 @@ dotenvExpand.expand(myEnv);
 
 const API = 'https://fakestoreapi.com';
 
+// only two users are seeded: one admin and one customer.
+const ADMIN_USERNAME = 'johnd';
+const CUSTOMER_USERNAME = 'kevinryan';
+
 async function fetchJson(path) {
 	const res = await fetch(`${API}${path}`);
 	if (!res.ok) {
@@ -37,7 +41,20 @@ async function seedDatabase() {
 	await Cart.insertMany(await fetchJson('/carts'));
 
 	console.log('fetching users...');
-	await User.insertMany(await fetchJson('/users'));
+	const allUsers = await fetchJson('/users');
+	const admin = allUsers.find((user) => user.username === ADMIN_USERNAME);
+	const customer = allUsers.find((user) => user.username === CUSTOMER_USERNAME);
+	if (!admin || !customer) {
+		throw new Error(
+			`upstream is missing ${ADMIN_USERNAME} and/or ${CUSTOMER_USERNAME}; cannot seed users`
+		);
+	}
+
+	// upstream data carries no roles, so mint an admin for the protected routes
+	await User.insertMany([
+		{ ...admin, role: 'admin' },
+		{ ...customer, role: 'customer' },
+	]);
 
 	const counts = {
 		products: await Product.countDocuments(),
@@ -52,7 +69,9 @@ async function seedDatabase() {
 if (require.main === module) {
 	seedDatabase()
 		.then((counts) => {
-			console.log(`done. products=${counts.products} carts=${counts.carts} users=${counts.users}`);
+			console.log(
+				`done. products=${counts.products} carts=${counts.carts} users=${counts.users} (${ADMIN_USERNAME} is admin, ${CUSTOMER_USERNAME} is customer)`
+			);
 			process.exit(0);
 		})
 		.catch((err) => {

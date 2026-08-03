@@ -1,6 +1,15 @@
 const Cart = require('../model/cart');
 const nextId = require('../util/id');
 const toDotPaths = require('../util/flatten');
+const { isOwnerOrAdmin, forbidden } = require('../util/auth');
+
+// strips the mongo ids the API never exposes
+const toResponse = (cart) => {
+	const cartObj = cart.toObject();
+	delete cartObj._id;
+	cartObj.products = cartObj.products.map(({ _id, ...p }) => p);
+	return cartObj;
+};
 
 module.exports.getAllCarts = (req, res) => {
 	const limit = Number(req.query.limit) || 0;
@@ -8,18 +17,24 @@ module.exports.getAllCarts = (req, res) => {
 	const startDate = req.query.startdate || new Date('1970-1-1');
 	const endDate = req.query.enddate || new Date();
 
-	console.log(startDate, endDate);
-
-	Cart.find({
+	const filter = {
 		date: { $gte: new Date(startDate), $lt: new Date(endDate) },
-	})
+	};
+	// a customer only ever sees their own carts
+	if (req.user.role !== 'admin') {
+		filter.userId = req.user.id;
+	}
+
+	Cart.find(filter)
 		.select('-_id -products._id')
 		.limit(limit)
 		.sort({ id: sort })
 		.then((carts) => {
 			res.json(carts);
 		})
-		.catch((err) => console.log(err));
+		.catch((err) => {
+			res.status(500).json({ status: 'error', message: err.message });
+		});
 };
 
 module.exports.getCartsbyUserid = (req, res) => {
@@ -27,7 +42,10 @@ module.exports.getCartsbyUserid = (req, res) => {
 	const startDate = req.query.startdate || new Date('1970-1-1');
 	const endDate = req.query.enddate || new Date();
 
-	console.log(startDate, endDate);
+	if (!isOwnerOrAdmin(req, userId)) {
+		return forbidden(res, 'you can only access your own carts');
+	}
+
 	Cart.find({
 		userId,
 		date: { $gte: new Date(startDate), $lt: new Date(endDate) },
@@ -36,7 +54,9 @@ module.exports.getCartsbyUserid = (req, res) => {
 		.then((carts) => {
 			res.json(carts);
 		})
-		.catch((err) => console.log(err));
+		.catch((err) => {
+			res.status(500).json({ status: 'error', message: err.message });
+		});
 };
 
 module.exports.getSingleCart = (req, res) => {
@@ -44,9 +64,21 @@ module.exports.getSingleCart = (req, res) => {
 	Cart.findOne({
 		id,
 	})
-		.select('-_id -products._id')
-		.then((cart) => res.json(cart))
-		.catch((err) => console.log(err));
+		.then((cart) => {
+			if (!cart) {
+				return res.status(404).json({
+					status: 'error',
+					message: 'cart not found',
+				});
+			}
+			if (!isOwnerOrAdmin(req, cart.userId)) {
+				return forbidden(res, 'you can only access your own carts');
+			}
+			res.json(toResponse(cart));
+		})
+		.catch((err) => {
+			res.status(500).json({ status: 'error', message: err.message });
+		});
 };
 
 module.exports.addCart = (req, res) => {
@@ -55,6 +87,8 @@ module.exports.addCart = (req, res) => {
 			status: 'error',
 			message: 'data is undefined',
 		});
+	} else if (!isOwnerOrAdmin(req, req.body.userId)) {
+		forbidden(res, 'you can only create carts for yourself');
 	} else {
 		nextId(Cart)
 			.then((id) =>
@@ -66,10 +100,7 @@ module.exports.addCart = (req, res) => {
 				}).save()
 			)
 			.then((cart) => {
-				const cartObj = cart.toObject();
-				delete cartObj._id;
-				cartObj.products = cartObj.products.map(({ _id, ...p }) => p);
-				res.json(cartObj);
+				res.json(toResponse(cart));
 			})
 			.catch((err) =>
 				res.status(err.name === 'ValidationError' ? 400 : 500).json({
@@ -88,16 +119,31 @@ module.exports.editCart = (req, res) => {
 		});
 	} else {
 		delete req.body.id;
-		Cart.findOneAndUpdate({ id: req.params.id }, toDotPaths(req.body), { new: true })
-			.select('-_id -products._id')
+		// load first so ownership can be checked before anything is mutated
+		Cart.findOne({ id: req.params.id })
 			.then((cart) => {
-				if (cart) {
-					res.json(cart);
-				} else {
+				if (!cart) {
 					res.status(404).json({
 						status: 'error',
 						message: 'cart not found',
 					});
+					return null;
+				}
+				if (!isOwnerOrAdmin(req, cart.userId)) {
+					forbidden(res, 'you can only modify your own carts');
+					return null;
+				}
+				// a customer cannot hand their cart to someone else
+				if (req.user.role !== 'admin') {
+					delete req.body.userId;
+				}
+				return Cart.findOneAndUpdate({ id: req.params.id }, toDotPaths(req.body), {
+					new: true,
+				});
+			})
+			.then((cart) => {
+				if (cart) {
+					res.json(toResponse(cart));
 				}
 			})
 			.catch((err) => {
@@ -125,6 +171,10 @@ module.exports.deleteCartProduct = (req, res) => {
 					});
 					return null;
 				}
+				if (!isOwnerOrAdmin(req, cart.userId)) {
+					forbidden(res, 'you can only modify your own carts');
+					return null;
+				}
 				const product = cart.products.find((p) => p.productId === productId);
 				if (!product) {
 					res.status(404).json({
@@ -138,10 +188,7 @@ module.exports.deleteCartProduct = (req, res) => {
 			})
 			.then((cart) => {
 				if (cart) {
-					const cartObj = cart.toObject();
-					delete cartObj._id;
-					cartObj.products = cartObj.products.map(({ _id, ...p }) => p);
-					res.json(cartObj);
+					res.json(toResponse(cart));
 				}
 			})
 			.catch((err) => {
@@ -157,16 +204,25 @@ module.exports.deleteCart = (req, res) => {
 			message: 'cart id should be provided',
 		});
 	} else {
-		Cart.findOneAndDelete({ id: req.params.id })
-			.select('-_id -products._id')
+		// load first so ownership can be checked before anything is removed
+		Cart.findOne({ id: req.params.id })
 			.then((cart) => {
-				if (cart) {
-					res.json(cart);
-				} else {
+				if (!cart) {
 					res.status(404).json({
 						status: 'error',
 						message: 'cart not found',
 					});
+					return null;
+				}
+				if (!isOwnerOrAdmin(req, cart.userId)) {
+					forbidden(res, 'you can only delete your own carts');
+					return null;
+				}
+				return Cart.findOneAndDelete({ id: req.params.id });
+			})
+			.then((cart) => {
+				if (cart) {
+					res.json(toResponse(cart));
 				}
 			})
 			.catch((err) => {

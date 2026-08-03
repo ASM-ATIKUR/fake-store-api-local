@@ -34,10 +34,14 @@ Conventions that run through every controller:
 - **PATCH and PUT map to the same handler.** Partial updates use `util/flatten.js` to turn nested bodies (`name.firstname`, `address.geolocation.lat`) into Mongo dot-paths so `$set` doesn't clobber whole subdocuments.
 - **Errors are mostly swallowed** — `.catch(err => console.log(err))` leaves the request hanging. Follow the existing shape when editing nearby code; don't treat it as a pattern worth spreading.
 
-`auth.js` compares plaintext passwords and signs a JWT with the hardcoded literal `'secret_key'`. Deliberate for fake data; no route is actually protected.
+**Auth lives in `util/auth.js`** — `authenticate` (Bearer header → `jwt.verify` → `req.user = { id, username, role }`), `requireAdmin`, and `isOwnerOrAdmin(req, userId)` / `forbidden(res, msg)` for the checks that need a DB read first. Product writes are admin-only, every `/carts` route is token-gated and scoped to the owner, and `/users` writes require owner-or-admin; reads of products/users and `POST /users` (signup) stay public. Ownership on carts is enforced *inside* the controllers — `editCart`/`deleteCart` deliberately `findOne` before mutating, since `findOneAndUpdate` would write before the check could run.
+
+The signing secret reads `process.env.JWT_SECRET` **lazily** (falling back to `'secret_key'`) because `server.js` requires `app.js` before calling `dotenv.config()`. `model/user.js` carries `role: 'customer' | 'admin'`; `seed.js` seeds only two users out of the upstream list — `johnd` / `m38rmF$` (id 1, admin) and `kevinryan` / `kev02937@` (id 3, customer); seeded carts may therefore reference userIds that no longer exist, which is fine for fake data. Passwords are still stored and compared in plaintext — deliberate, matching the upstream fake data.
 
 `routes/home.js` + `views/` render EJS docs pages; `app.disable('view cache')` keeps them hot in dev.
 
 ## Tests
+
+`__test__/helpers/login.js` hands out admin (`johnd`) and customer (`kevinryan`) tokens — use it rather than logging in inline. Those two are the only seeded users, so never mutate or delete them in a spec — `user.spec.js` creates its own throwaway user via `POST /users` and rewrites/deletes that instead. Jest gives no cross-file ordering guarantee, so don't assume a fixed user count either.
 
 `jest.config.js` wires `__test__/globalSetup.js` (runs the real seeder against the real DB — **destructive**, it `deleteMany`s all three collections) and `__test__/setup.js` (per-suite mongoose connect/disconnect). Tests hit a live MongoDB; there is no in-memory server. Specs use supertest against the exported `app`.

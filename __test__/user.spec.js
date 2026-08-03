@@ -1,7 +1,17 @@
 const supertest = require('supertest')
 const app = require('../app')
+const { loginAdmin } = require('./helpers/login')
 
 describe('testing user API',()=>{
+    let adminToken
+    // seed.js only keeps the admin and the customer, so the write tests below
+    // operate on the throwaway user created by 'add a new user'.
+    let scratchUserId
+
+    beforeAll(async () => {
+        adminToken = await loginAdmin()
+    }, 30000)
+
     it('get all users',async()=>{
         const response = await supertest(app).get('/users')
         expect(response.status).toBe(200)
@@ -11,7 +21,7 @@ describe('testing user API',()=>{
 
 
     it('get a single user',async ()=>{
-        const response = await supertest(app).get('/users/2')
+        const response = await supertest(app).get('/users/1')
         expect(response.status).toBe(200);
         console.log(response.body)
         expect(response.body).not.toStrictEqual({});
@@ -19,18 +29,19 @@ describe('testing user API',()=>{
     },30000)
 
     it("get users in a limit and sort", async () => {
-        const response = await supertest(app).get("/users?limit=3&sort=desc")
+        const response = await supertest(app).get("/users?limit=2&sort=desc")
         expect(response.status).toBe(200)
         console.log('get with querystring', response.body)
         expect(response.body).not.toStrictEqual([])
-        expect(response.body).toHaveLength(3);
+        expect(response.body).toHaveLength(2);
     })
 
 
+    // signup stays public - no Authorization header here on purpose
     it('add a new user',async () => {
         const response = await supertest(app).post('/users').send({
-            email:'John@gmail.com',
-            username:'johnd',
+            email:'scratch@gmail.com',
+            username:'scratchuser',
             password:'m38rmF$',
             name:{
                 firstname:'John',
@@ -51,11 +62,12 @@ describe('testing user API',()=>{
         expect(response.status).toBe(200);
         console.log(response.body)
         expect(response.body).toHaveProperty('id');
+        scratchUserId = response.body.id
     },30000)
 
 
     it('put a user',async () => {
-        const response = await supertest(app).put('/users/2').send({
+        const response = await supertest(app).put(`/users/${scratchUserId}`).set('Authorization', `Bearer ${adminToken}`).send({
             email:'mrk@y.com',
             username:'mrk',
             password:'1234566',
@@ -83,7 +95,7 @@ describe('testing user API',()=>{
 
 
     it('patch a user',async () => {
-        const response = await supertest(app).patch('/users/2').send({
+        const response = await supertest(app).patch(`/users/${scratchUserId}`).set('Authorization', `Bearer ${adminToken}`).send({
             email:'mrk@y.com',
             username:'mrk',
             password:'1234566',
@@ -111,7 +123,7 @@ describe('testing user API',()=>{
 
 
     it('delete a user',async () => {
-        const response = await supertest(app).delete('/users/2')
+        const response = await supertest(app).delete(`/users/${scratchUserId}`).set('Authorization', `Bearer ${adminToken}`)
         expect(response.status).toBe(200);
         console.log(response.body)
         expect(response.body).toHaveProperty('id');

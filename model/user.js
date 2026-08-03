@@ -38,7 +38,12 @@ const userSchema = new schema({
             long:String
         }
     },
-    phone:String
+    phone:String,
+    role:{
+        type:String,
+        enum:['customer','admin'],
+        default:'customer'
+    }
 })
 
 module.exports = mongoose.model('user',userSchema)

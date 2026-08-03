@@ -1,7 +1,14 @@
 const supertest = require("supertest")
 const app = require("../app")
+const { loginAdmin } = require("./helpers/login")
 
 describe("Testing products API", () => {
+    let adminToken
+
+    beforeAll(async () => {
+        adminToken = await loginAdmin()
+    }, 30000)
+
     it("all product", async () => {
         const response = await supertest(app).get("/products")
         expect(response.status).toBe(200)
@@ -35,7 +42,7 @@ describe("Testing products API", () => {
     })
 
     it("post a product", async () => {
-        const response = await supertest(app).post('/products').send({
+        const response = await supertest(app).post('/products').set('Authorization', `Bearer ${adminToken}`).send({
             title: 'test',
             price: 13.5,
             description: 'test desc',
@@ -48,7 +55,7 @@ describe("Testing products API", () => {
     })
 
     it("put a product", async () => {
-        const response = await supertest(app).put('/products/1').send({
+        const response = await supertest(app).put('/products/1').set('Authorization', `Bearer ${adminToken}`).send({
             title: 'test',
             price: 13.5,
             description: 'test desc',
@@ -62,7 +69,7 @@ describe("Testing products API", () => {
 
 
     it("patch a product", async () => {
-        const response = await supertest(app).patch('/products/1').send({
+        const response = await supertest(app).patch('/products/1').set('Authorization', `Bearer ${adminToken}`).send({
             title: 'test',
             price: 13.5,
             description: 'test desc',
@@ -76,7 +83,7 @@ describe("Testing products API", () => {
 
 
     it('delete a product', async () => {
-        const response = await supertest(app).delete('/products/1')
+        const response = await supertest(app).delete('/products/1').set('Authorization', `Bearer ${adminToken}`)
         expect(response.status).toBe(200)
         console.log('delete', response.body)
         expect(response.body).toHaveProperty('id')
