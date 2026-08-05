@@ -7,9 +7,21 @@
     </svg>
     Cart</h2>
 <h3 id="c-all">Get all carts</h3>
-<pre><code>fetch(<span class="c-api">'https://fakestoreapi.com/carts'</span>)
+<pre><code>fetch(<span class="c-api">'https://fakestoreapi.com/carts'</span>,{
+            headers:{"Authorization":"Bearer &lt;your token&gt;"}
+        })
             .then(res=>res.json())
             .then(json=>console.log(json))</code></pre>
+<p>
+    <span class="tips">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            class="feather feather-zap">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+        </svg>
+    </span>Every cart route needs a token. You get back your own carts; an admin gets
+    everyone's. If you have no cart at all, an empty one is created for you and returned.
+</p>
 <button class="show-output btn btn-outline">Show output</button>
 <pre class="output-result"><code>
             <span class="c-comment">//output</span>
@@ -186,14 +198,14 @@
 
 
 
-<h3 id="c-new">Add a new product</h3>
+<h3 id="c-new">Add a product to your cart</h3>
 <pre><code>fetch('<span class="c-api">https://fakestoreapi.com/carts'</span>,{
             method:"POST",
+            headers:{"Authorization":"Bearer &lt;your token&gt;"},
             body:JSON.stringify(
                 {
-                    userId:5,
-                    date:2020-02-03,
-                    products:[{productId:5,quantity:1},{productId:1,quantity:5}]
+                    productId:5,
+                    quantity:1
                 }
             )
         })
@@ -206,42 +218,45 @@
             class="feather feather-zap">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
         </svg>
-    </span>If you send an object like the code above, it will return you an object with a new id.
+    </span>The product is added to <em>your</em> cart, resolved from your token - there is no
+    cart id in the path, and <span class="c-api">userId</span> is never read from the body.
+    <span class="c-api">quantity</span> defaults to 1, and adding a product that is already
+    in the cart increases its quantity instead of creating a second line.
+    <span class="c-api">priceAtAdd</span> is stamped from the catalog, so anything you send
+    for it is ignored. Cart writes are customer-only: an admin token gets a 403.
     remember that the data will really be inserted into the database.
 </p>
 <button class="show-output btn btn-outline">Show output</button>
 <pre class="output-result"><code>
             <span class="c-comment">//output</span>
             {
-                id:21
+                id:21,
                 userId:5,
                 date:2020-02-03,
-                products:[{productId:5,quantity:1},{productId:1,quantity:5}]
+                products:[{productId:5,quantity:1,priceAtAdd:109.95}]
             }
         </code></pre>
 
 
 
-<h3 id="c-update">Update a product</h3>
-<pre><code>fetch('<span class="c-api">https://fakestoreapi.com/carts/7'</span>,{
+<h3 id="c-update">Update a product in your cart</h3>
+<pre><code>fetch('<span class="c-api">https://fakestoreapi.com/carts/products/1'</span>,{
             method:"PUT",
+            headers:{"Authorization":"Bearer &lt;your token&gt;"},
             body:JSON.stringify(
                 {
-                    userId:3,
-                    date:2019-12-10,
-                    products:[{productId:1,quantity:3}]
+                    quantity:3
                 }
             )
         })
             .then(res=>res.json())
             .then(json=>console.log(json))</code></pre>
-<pre><code>fetch('<span class="c-api">https://fakestoreapi.com/carts/7'</span>,{
+<pre><code>fetch('<span class="c-api">https://fakestoreapi.com/carts/products/1'</span>,{
                 method:"PATCH",
+                headers:{"Authorization":"Bearer &lt;your token&gt;"},
                 body:JSON.stringify(
                     {
-                        userId:3,
-                        date:2019-12-10,
-                        products:[{productId:1,quantity:3}]
+                        quantity:3
                     }
                 )
             })
@@ -254,7 +269,10 @@
             class="feather feather-zap">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
         </svg>
-    </span>It will return you an object with the sent id.
+    </span>The id in the path is a <em>product</em> id, and the cart is your own.
+    <span class="c-api">quantity</span> is the only editable field - it must be a whole
+    number of at least 1 - and the original <span class="c-api">priceAtAdd</span> snapshot
+    is left alone. It returns your whole updated cart.
     remember that the data will really be updated in the database.
 </p>
 <button class="show-output btn btn-outline">Show output</button>
@@ -264,15 +282,16 @@
                 id:7,
                 userId:3,
                 date:2019-12-10,
-                products:[{productId:1,quantity:3}]
+                products:[{productId:1,quantity:3,priceAtAdd:109.95}]
             }
         </code></pre>
 
 
 
-<h3 id="c-delete-product">Delete a product from a cart</h3>
-<pre><code>fetch('<span class="c-api">https://fakestoreapi.com/carts/6/products/2'</span>,{
-            method:"DELETE"
+<h3 id="c-delete-product">Delete a product from your cart</h3>
+<pre><code>fetch('<span class="c-api">https://fakestoreapi.com/carts/products/2'</span>,{
+            method:"DELETE",
+            headers:{"Authorization":"Bearer &lt;your token&gt;"}
         })
             .then(res=>res.json())
             .then(json=>console.log(json))</code></pre>
@@ -283,7 +302,7 @@
             class="feather feather-zap">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
         </svg>
-    </span>The product with the given id will be removed from the cart. the update will really be saved to the database
+    </span>The product with the given id will be removed from your cart. the update will really be saved to the database
     and it will return you the updated cart.
 </p>
 <button class="show-output btn btn-outline">Show output</button>
@@ -293,14 +312,15 @@
                 id:6,
                 userId:...,
                 date:...,
-                products:[{productId:1,quantity:5}]
+                products:[{productId:1,quantity:5,priceAtAdd:22.3}]
             }
         </code></pre>
 
 
 <h3 id="c-delete">Delete a cart</h3>
 <pre><code>fetch('<span class="c-api">https://fakestoreapi.com/carts/6'</span>,{
-            method:"DELETE"
+            method:"DELETE",
+            headers:{"Authorization":"Bearer &lt;your token&gt;"}
         })
             .then(res=>res.json())
             .then(json=>console.log(json))</code></pre>
@@ -311,7 +331,8 @@
             class="feather feather-zap">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
         </svg>
-    </span>The cart will really be deleted from the database and it will return you the deleted cart.
+    </span>You can only delete a cart you own, and an admin token gets a 403 like every other
+    cart write. The cart will really be deleted from the database and it will return you the deleted cart.
 </p>
 <button class="show-output btn btn-outline">Show output</button>
 <pre class="output-result"><code>

@@ -1,6 +1,6 @@
 const supertest = require('supertest')
 const app = require('../app')
-const { CUSTOMER, loginAdmin, loginCustomer } = require('./helpers/login')
+const { CUSTOMER, loginAdmin, loginCustomer, createThrowawayUser } = require('./helpers/login')
 
 const product = {
     title: 'test',
@@ -128,33 +128,46 @@ describe('authentication and authorization', () => {
             expect(response.body.some((cart) => cart.userId !== 1)).toBe(true)
         })
 
-        it("forbids creating a cart for another user", async () => {
+        it('ignores a userId in the body and adds to the caller own cart', async () => {
+            const products = await supertest(app).get('/products?limit=1')
+            const product = products.body[0]
+
+            // a throwaway shopper: cart.spec.js mutates carts in parallel, and two
+            // files pushing to one cart document race
+            const shopper = await createThrowawayUser()
             const response = await supertest(app)
                 .post('/carts')
-                .set('Authorization', `Bearer ${customerToken}`)
-                .send({ userId: 1, products: [{ productId: 1, quantity: 1 }] })
-            expect(response.status).toBe(403)
+                .set('Authorization', `Bearer ${shopper.token}`)
+                .send({ userId: 1, productId: product.id, quantity: 1 })
+            expect(response.status).toBe(200)
+            expect(response.body.userId).toBe(shopper.id)
         })
 
         it("forbids deleting another user's cart, and leaves it intact", async () => {
-            // create a throwaway cart owned by user 1, so this doesn't race with
-            // cart.spec.js, which deletes seeded carts
-            const created = await supertest(app)
-                .post('/carts')
+            // seeded cart 1 belongs to johnd (userId 1). No spec mutates it: cart
+            // writes are customer-only and every customer spec uses its own user.
+            const target = await supertest(app)
+                .get('/carts/1')
                 .set('Authorization', `Bearer ${adminToken}`)
-                .send({ userId: 1, products: [{ productId: 1, quantity: 1 }] })
-            expect(created.status).toBe(200)
-            const target = created.body
+            expect(target.status).toBe(200)
 
             const response = await supertest(app)
-                .delete(`/carts/${target.id}`)
+                .delete('/carts/1')
                 .set('Authorization', `Bearer ${customerToken}`)
             expect(response.status).toBe(403)
 
             const stillThere = await supertest(app)
-                .get(`/carts/${target.id}`)
+                .get('/carts/1')
                 .set('Authorization', `Bearer ${adminToken}`)
             expect(stillThere.status).toBe(200)
+        })
+
+        it('forbids an admin from writing to carts', async () => {
+            const response = await supertest(app)
+                .post('/carts')
+                .set('Authorization', `Bearer ${adminToken}`)
+                .send({ productId: 1, quantity: 1 })
+            expect(response.status).toBe(403)
         })
     })
 

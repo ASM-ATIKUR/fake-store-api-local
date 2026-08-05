@@ -1,7 +1,10 @@
 const Cart = require('../model/cart');
+const Product = require('../model/product');
 const nextId = require('../util/id');
-const toDotPaths = require('../util/flatten');
 const { isOwnerOrAdmin, forbidden } = require('../util/auth');
+
+// carts belong to shoppers; an admin manages the catalog, not a basket
+const CUSTOMER_ONLY = 'admins cannot add, update or delete products in a cart';
 
 // strips the mongo ids the API never exposes
 const toResponse = (cart) => {
@@ -10,6 +13,22 @@ const toResponse = (cart) => {
 	cartObj.products = cartObj.products.map(({ _id, ...p }) => p);
 	return cartObj;
 };
+
+// the caller's active cart: most recent by date, newest id as tie-break.
+// seeded users own several carts, so "my cart" needs a deterministic pick.
+const findMyCart = (userId) => Cart.findOne({ userId }).sort({ date: -1, id: -1 });
+
+const createEmptyCart = (userId) =>
+	nextId(Cart).then((id) => new Cart({ id, userId, date: new Date(), products: [] }).save());
+
+const myCartOrNew = (userId) =>
+	findMyCart(userId).then((cart) => cart || createEmptyCart(userId));
+
+const failed = (res) => (err) =>
+	res.status(err.name === 'ValidationError' ? 400 : 500).json({
+		status: 'error',
+		message: err.message,
+	});
 
 module.exports.getAllCarts = (req, res) => {
 	const limit = Number(req.query.limit) || 0;
@@ -25,16 +44,27 @@ module.exports.getAllCarts = (req, res) => {
 		filter.userId = req.user.id;
 	}
 
-	Cart.find(filter)
-		.select('-_id -products._id')
-		.limit(limit)
-		.sort({ id: sort })
-		.then((carts) => {
-			res.json(carts);
+	const listCarts = () =>
+		Cart.find(filter).select('-_id -products._id').limit(limit).sort({ id: sort });
+
+	if (req.user.role === 'admin') {
+		return listCarts()
+			.then((carts) => res.json(carts))
+			.catch(failed(res));
+	}
+
+	// a shopper always has somewhere to put things. The count deliberately ignores
+	// the date filter: endDate was captured above, so a cart created now would fall
+	// outside it — and a narrow date query must not mint a cart on every call.
+	Cart.countDocuments({ userId: req.user.id })
+		.then((owned) => {
+			if (owned === 0) {
+				return createEmptyCart(req.user.id).then((cart) => [toResponse(cart)]);
+			}
+			return listCarts();
 		})
-		.catch((err) => {
-			res.status(500).json({ status: 'error', message: err.message });
-		});
+		.then((carts) => res.json(carts))
+		.catch(failed(res));
 };
 
 module.exports.getCartsbyUserid = (req, res) => {
@@ -81,123 +111,137 @@ module.exports.getSingleCart = (req, res) => {
 		});
 };
 
-module.exports.addCart = (req, res) => {
-	if (!req.body || !req.body.userId || !req.body.products) {
-		res.json({
-			status: 'error',
-			message: 'data is undefined',
-		});
-	} else if (!isOwnerOrAdmin(req, req.body.userId)) {
-		forbidden(res, 'you can only create carts for yourself');
-	} else {
-		nextId(Cart)
-			.then((id) =>
-				new Cart({
-					id,
-					userId: req.body.userId,
-					date: req.body.date || new Date(),
-					products: req.body.products,
-				}).save()
-			)
-			.then((cart) => {
-				res.json(toResponse(cart));
-			})
-			.catch((err) =>
-				res.status(err.name === 'ValidationError' ? 400 : 500).json({
-					status: 'error',
-					message: err.message,
-				})
-			);
+module.exports.addProductToCart = (req, res) => {
+	if (req.user.role === 'admin') {
+		return forbidden(res, CUSTOMER_ONLY);
 	}
+	if (!req.body || req.body.productId == null) {
+		return res.status(400).json({
+			status: 'error',
+			message: 'a productId should be provided',
+		});
+	}
+
+	const productId = Number(req.body.productId);
+	const quantity = req.body.quantity == null ? 1 : Number(req.body.quantity);
+
+	// the catalog lookup both validates the product and supplies the price,
+	// so a client can never name its own
+	Product.findOne({ id: productId })
+		.select('id price')
+		.then((product) => {
+			if (!product) {
+				res.status(404).json({
+					status: 'error',
+					message: 'product not found',
+				});
+				return null;
+			}
+
+			return myCartOrNew(req.user.id).then((cart) => {
+				const line = cart.products.find((p) => p.productId === productId);
+				if (line) {
+					// adding the same item again bumps the quantity; the schema
+					// rejects a duplicate productId, and priceAtAdd stays the
+					// snapshot from when it first went in
+					line.quantity += quantity;
+				} else {
+					cart.products.push({ productId, quantity, priceAtAdd: product.price });
+				}
+				return cart.save();
+			});
+		})
+		.then((cart) => {
+			if (cart) {
+				res.json(toResponse(cart));
+			}
+		})
+		.catch(failed(res));
 };
 
-module.exports.editCart = (req, res) => {
-	if (!req.body || req.params.id == null) {
-		res.json({
-			status: 'error',
-			message: 'something went wrong! check your sent data',
-		});
-	} else {
-		delete req.body.id;
-		// load first so ownership can be checked before anything is mutated
-		Cart.findOne({ id: req.params.id })
-			.then((cart) => {
-				if (!cart) {
-					res.status(404).json({
-						status: 'error',
-						message: 'cart not found',
-					});
-					return null;
-				}
-				if (!isOwnerOrAdmin(req, cart.userId)) {
-					forbidden(res, 'you can only modify your own carts');
-					return null;
-				}
-				// a customer cannot hand their cart to someone else
-				if (req.user.role !== 'admin') {
-					delete req.body.userId;
-				}
-				return Cart.findOneAndUpdate({ id: req.params.id }, toDotPaths(req.body), {
-					new: true,
-				});
-			})
-			.then((cart) => {
-				if (cart) {
-					res.json(toResponse(cart));
-				}
-			})
-			.catch((err) => {
-				res.status(500).json({ status: 'error', message: err.message });
-			});
+module.exports.editProductInCart = (req, res) => {
+	if (req.user.role === 'admin') {
+		return forbidden(res, CUSTOMER_ONLY);
 	}
+	if (!req.body || req.body.quantity == null) {
+		return res.status(400).json({
+			status: 'error',
+			message: 'a quantity should be provided',
+		});
+	}
+
+	const productId = Number(req.params.productId);
+
+	findMyCart(req.user.id)
+		.then((cart) => {
+			if (!cart) {
+				res.status(404).json({
+					status: 'error',
+					message: 'you have no cart',
+				});
+				return null;
+			}
+			const line = cart.products.find((p) => p.productId === productId);
+			if (!line) {
+				res.status(404).json({
+					status: 'error',
+					message: 'product not found in cart',
+				});
+				return null;
+			}
+			// quantity is the only editable field: priceAtAdd is a snapshot and
+			// productId identifies the line
+			line.quantity = Number(req.body.quantity);
+			return cart.save();
+		})
+		.then((cart) => {
+			if (cart) {
+				res.json(toResponse(cart));
+			}
+		})
+		.catch(failed(res));
 };
 
 module.exports.deleteCartProduct = (req, res) => {
-	if (req.params.id == null || req.params.productId == null) {
-		res.status(400).json({
-			status: 'error',
-			message: 'cart id and product id should be provided',
-		});
-	} else {
-		const cartId = req.params.id;
-		const productId = Number(req.params.productId);
-
-		Cart.findOne({ id: cartId })
-			.then((cart) => {
-				if (!cart) {
-					res.status(404).json({
-						status: 'error',
-						message: 'cart not found',
-					});
-					return null;
-				}
-				if (!isOwnerOrAdmin(req, cart.userId)) {
-					forbidden(res, 'you can only modify your own carts');
-					return null;
-				}
-				const product = cart.products.find((p) => p.productId === productId);
-				if (!product) {
-					res.status(404).json({
-						status: 'error',
-						message: 'product not found in cart',
-					});
-					return null;
-				}
-				cart.products = cart.products.filter((p) => p.productId !== productId);
-				return cart.save();
-			})
-			.then((cart) => {
-				if (cart) {
-					res.json(toResponse(cart));
-				}
-			})
-			.catch((err) => {
-				res.status(500).json({ status: 'error', message: err.message });
-			});
+	if (req.user.role === 'admin') {
+		return forbidden(res, CUSTOMER_ONLY);
 	}
+
+	const productId = Number(req.params.productId);
+
+	// resolving the cart from the token makes reaching someone else's impossible
+	findMyCart(req.user.id)
+		.then((cart) => {
+			if (!cart) {
+				res.status(404).json({
+					status: 'error',
+					message: 'you have no cart',
+				});
+				return null;
+			}
+			const product = cart.products.find((p) => p.productId === productId);
+			if (!product) {
+				res.status(404).json({
+					status: 'error',
+					message: 'product not found in cart',
+				});
+				return null;
+			}
+			cart.products = cart.products.filter((p) => p.productId !== productId);
+			return cart.save();
+		})
+		.then((cart) => {
+			if (cart) {
+				res.json(toResponse(cart));
+			}
+		})
+		.catch(failed(res));
 };
 
 module.exports.deleteCart = (req, res) => {
+	if (req.user.role === 'admin') {
+		return forbidden(res, CUSTOMER_ONLY);
+	}
 	if (req.params.id == null) {
 		res.json({
 			status: 'error',
@@ -225,8 +269,6 @@ module.exports.deleteCart = (req, res) => {
 					res.json(toResponse(cart));
 				}
 			})
-			.catch((err) => {
-				res.status(500).json({ status: 'error', message: err.message });
-			});
+			.catch(failed(res));
 	}
 };

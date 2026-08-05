@@ -1,15 +1,20 @@
 const supertest = require('supertest')
 const app = require('../app')
-const { loginAdmin } = require('./helpers/login')
+const { loginAdmin, createThrowawayUser } = require('./helpers/login')
 
-// every cart route requires a token; these run as admin so they can reach
-// carts belonging to any user. Ownership rules are covered in authorization.spec.js
+// Reads run as admin so they can reach carts belonging to any user.
+// Writes are customer-only now and always act on the caller's own cart, so they
+// run as a throwaway customer - never kevinryan, whose cart authorization.spec.js
+// also touches. Ownership rules are covered in authorization.spec.js
 describe('testing cart API',()=>{
     let token
+    let customerToken
     const auth = (request) => request.set('Authorization', `Bearer ${token}`)
+    const asCustomer = (request) => request.set('Authorization', `Bearer ${customerToken}`)
 
     beforeAll(async () => {
         token = await loginAdmin()
+        customerToken = (await createThrowawayUser()).token
     }, 30000)
 
     it('get all carts',async()=>{
@@ -26,7 +31,11 @@ describe('testing cart API',()=>{
         console.log(response.body)
         expect(response.body).not.toEqual({});
         expect(response.body).toHaveProperty('userId');
-        expect(response.body).not.toHaveProperty('_Id');
+        expect(response.body).not.toHaveProperty('_id');
+        // line items must not leak their subdocument ids either
+        response.body.products.forEach(product => {
+            expect(product).not.toHaveProperty('_id')
+        })
     })
 
     it("get carts in a date range and limit and sort", async () => {
@@ -68,52 +77,206 @@ describe('testing cart API',()=>{
     })
 
 
-    it('add a new cart',async () => {
-        const response = await auth(supertest(app).post('/carts')).send({
-            userId:1,
-            date:new Date('2020-10-10'),
-            products:[{productId:2,quantity:4},{productId:1,quantity:10},{productId:5,quantity:2}]
+    // product.spec.js deletes products, so never hard-code an id here
+    const anyProduct = async () => {
+        const response = await auth(supertest(app).get('/products?limit=1'))
+        return response.body[0]
+    }
+
+    // the line the caller just touched, read back off the response
+    const lineFor = (response, productId) =>
+        response.body.products.find(p => p.productId === productId)
+
+    it('adds a product to the caller own cart',async () => {
+        const product = await anyProduct()
+        const response = await asCustomer(supertest(app).post('/carts')).send({
+            productId:product.id,
+            quantity:2
         })
         expect(response.status).toBe(200);
         console.log(response.body)
         expect(response.body).toHaveProperty('id');
+        expect(lineFor(response, product.id).quantity).toBe(2);
+    })
+
+    it('stamps priceAtAdd from the catalog, ignoring whatever the client sent',async () => {
+        const product = await anyProduct()
+        const response = await asCustomer(supertest(app).post('/carts')).send({
+            productId:product.id,
+            quantity:1,
+            priceAtAdd:0.01
+        })
+        expect(response.status).toBe(200);
+        expect(lineFor(response, product.id).priceAtAdd).toBe(product.price);
+    })
+
+    it('bumps the quantity when the same product is added again',async () => {
+        const product = await anyProduct()
+        const before = await asCustomer(supertest(app).post('/carts')).send({
+            productId:product.id,
+            quantity:1
+        })
+        expect(before.status).toBe(200);
+
+        const after = await asCustomer(supertest(app).post('/carts')).send({
+            productId:product.id,
+            quantity:3
+        })
+        expect(after.status).toBe(200);
+        expect(lineFor(after, product.id).quantity).toBe(lineFor(before, product.id).quantity + 3);
+        // still a single line for that product
+        expect(after.body.products.filter(p => p.productId === product.id)).toHaveLength(1);
+    })
+
+    it('rejects a quantity below 1',async () => {
+        const product = await anyProduct()
+        const response = await asCustomer(supertest(app).post('/carts')).send({
+            productId:product.id,
+            quantity:-99
+        })
+        expect(response.status).toBe(400);
+    })
+
+    it('rejects a product that is not in the catalog',async () => {
+        const response = await asCustomer(supertest(app).post('/carts')).send({
+            productId:999999,
+            quantity:1
+        })
+        expect(response.status).toBe(404);
+    })
+
+    it('rejects an add with no productId',async () => {
+        const response = await asCustomer(supertest(app).post('/carts')).send({quantity:1})
+        expect(response.status).toBe(400);
     })
 
 
-    it('edit a cart',async () => {
-        const response = await auth(supertest(app).put('/carts/2')).send({
-            userId:1,
-            date:new Date('2020-10-10'),
-            products:[{productId:2,quantity:4},{productId:1,quantity:10},{productId:5,quantity:2}]
+    it('updates a product in the cart with PUT',async () => {
+        const product = await anyProduct()
+        await asCustomer(supertest(app).post('/carts')).send({productId:product.id,quantity:1})
+
+        const response = await asCustomer(supertest(app).put(`/carts/products/${product.id}`)).send({
+            quantity:4
         })
         expect(response.status).toBe(200);
         console.log(response.body)
-        expect(response.body).toHaveProperty('id');
+        expect(lineFor(response, product.id).quantity).toBe(4);
     })
 
 
-    it('edit a cart',async () => {
-        const response = await auth(supertest(app).patch('/carts/2')).send({
-            userId:1,
-            date:new Date('2020-10-10'),
-            products:[{productId:2,quantity:4},{productId:1,quantity:10},{productId:5,quantity:2}]
+    it('updates a product in the cart with PATCH and leaves priceAtAdd alone',async () => {
+        const product = await anyProduct()
+        const added = await asCustomer(supertest(app).post('/carts')).send({productId:product.id,quantity:1})
+
+        const response = await asCustomer(supertest(app).patch(`/carts/products/${product.id}`)).send({
+            quantity:6,
+            priceAtAdd:0.01
         })
         expect(response.status).toBe(200);
-        console.log(response.body)
-        expect(response.body).toHaveProperty('id');
+        expect(lineFor(response, product.id).quantity).toBe(6);
+        expect(lineFor(response, product.id).priceAtAdd).toBe(lineFor(added, product.id).priceAtAdd);
+    })
+
+    it('rejects an update to a quantity below 1',async () => {
+        const product = await anyProduct()
+        await asCustomer(supertest(app).post('/carts')).send({productId:product.id,quantity:1})
+
+        const response = await asCustomer(supertest(app).patch(`/carts/products/${product.id}`)).send({
+            quantity:0
+        })
+        expect(response.status).toBe(400);
+    })
+
+    it('rejects an update to a product that is not in the cart',async () => {
+        const response = await asCustomer(supertest(app).patch('/carts/products/999999')).send({
+            quantity:2
+        })
+        expect(response.status).toBe(404);
     })
 
 
     it('delete a product from a cart',async () => {
-        const response = await auth(supertest(app).delete('/carts/3/products/1'))
+        const product = await anyProduct()
+        await asCustomer(supertest(app).post('/carts')).send({productId:product.id,quantity:1})
+
+        const response = await asCustomer(supertest(app).delete(`/carts/products/${product.id}`))
         expect(response.status).toBe(200);
         console.log(response.body)
         expect(response.body).toHaveProperty('id');
-        expect(response.body.products).not.toContainEqual(expect.objectContaining({productId:1}));
+        expect(response.body.products).not.toContainEqual(expect.objectContaining({productId:product.id}));
     })
 
+    it('404s deleting a product the cart does not hold',async () => {
+        const response = await asCustomer(supertest(app).delete('/carts/products/999999'))
+        expect(response.status).toBe(404);
+    })
+
+
+    describe('admin is locked out of cart writes', () => {
+        it('cannot add a product', async () => {
+            const product = await anyProduct()
+            const response = await auth(supertest(app).post('/carts')).send({
+                productId:product.id,
+                quantity:1
+            })
+            expect(response.status).toBe(403)
+            expect(response.body.message).toMatch(/admins cannot/)
+        })
+
+        it('cannot update a product', async () => {
+            const response = await auth(supertest(app).put('/carts/products/1')).send({quantity:2})
+            expect(response.status).toBe(403)
+        })
+
+        it('cannot delete a product', async () => {
+            const response = await auth(supertest(app).delete('/carts/products/1'))
+            expect(response.status).toBe(403)
+        })
+
+        it('cannot delete a cart', async () => {
+            const response = await auth(supertest(app).delete('/carts/1'))
+            expect(response.status).toBe(403)
+        })
+    })
+
+
+    it('gives a customer with no carts an empty one', async () => {
+        const fresh = await createThrowawayUser()
+        const asFresh = (request) => request.set('Authorization', `Bearer ${fresh.token}`)
+
+        // A new user id can collide with a seeded cart's userId - seed.js keeps only
+        // users 1 and 3 but seeds carts for userIds 1,2,3,4,8. Clear whatever they
+        // inherited so "has no cart" is actually true.
+        const inherited = await asFresh(supertest(app).get('/carts'))
+        for (const cart of inherited.body) {
+            await asFresh(supertest(app).delete(`/carts/${cart.id}`))
+        }
+
+        const first = await asFresh(supertest(app).get('/carts'))
+        expect(first.status).toBe(200)
+        expect(first.body).toHaveLength(1)
+        expect(first.body[0].products).toEqual([])
+        expect(first.body[0].userId).toBe(fresh.id)
+
+        // asking again must return the same cart, not mint another
+        const second = await asFresh(supertest(app).get('/carts'))
+        expect(second.body).toHaveLength(1)
+        expect(second.body[0].id).toBe(first.body[0].id)
+
+        // and a narrow date window must not mint one either
+        await asFresh(supertest(app).get('/carts?startdate=2019-01-01&enddate=2019-06-01'))
+        const third = await asFresh(supertest(app).get('/carts'))
+        expect(third.body).toHaveLength(1)
+        expect(third.body[0].id).toBe(first.body[0].id)
+    })
+
+
+    // last: this removes the customer's active cart
     it('delete a cart',async () => {
-        const response = await auth(supertest(app).delete('/carts/2'))
+        const mine = await asCustomer(supertest(app).get('/carts'))
+        const target = mine.body[mine.body.length - 1]
+
+        const response = await asCustomer(supertest(app).delete(`/carts/${target.id}`))
         expect(response.status).toBe(200);
         console.log(response.body)
         expect(response.body).toHaveProperty('id');

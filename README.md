@@ -229,13 +229,29 @@ fields:
     id:Number,
     userId:Number,
     date:Date,
-    products:[{productId:Number,quantity:Number}]
+    products:[{productId:Number,quantity:Number,priceAtAdd:Number}]
 }
 ```
 
+`quantity` must be a whole number of at least 1, and a `productId` may only appear
+once per cart.
+
+`priceAtAdd` is the product's price at the moment it was added to the cart. It is
+always filled in server-side from the catalog — any value you send is ignored — and is
+absent on the carts loaded by `npm run seed`, since the upstream fakestoreapi data
+carries no price on cart lines.
+
+**Cart writes are customer-only.** An admin manages the catalog, not a basket, so every
+write below returns 403 for an admin token. Admins can still read any cart.
+
+**Writes always act on your own cart**, resolved from your token — your most recent cart
+by `date`. There is no cart id in a write path, and `userId` and `date` are never taken
+from the body. If you have no cart at all, `GET /carts` creates an empty one for you and
+returns it.
+
 GET:
 
-- /carts (get all carts)
+- /carts (your carts; an admin sees everyone's)
 - /carts/1 (get specific cart based on id)
 - /carts?startdate=2020-10-03&enddate=2020-12-12 (get carts in date range)
 - /carts/user/1 (get a user cart)
@@ -245,16 +261,17 @@ GET:
 
 POST:
 
-- /carts
+- /carts (add a product to your cart — body `{productId, quantity}`, `quantity` defaults
+  to 1. Adding a product already in the cart increases its quantity.)
 
 PUT,PATCH:
 
-- /carts/1
+- /carts/products/1 (set the quantity of a product in your cart — body `{quantity}`)
 
 DELETE:
 
-- /carts/1
-- /carts/1/products/1 (delete a specific product from a cart)
+- /carts/products/1 (remove a product from your cart)
+- /carts/1 (delete one of your carts)
 
 ### Users
 
