@@ -41,6 +41,71 @@ describe("Testing products API", () => {
         expect(response.body).toHaveLength(3);
     })
 
+    describe('sorting', () => {
+        // this suite edits and deletes products, and others run in parallel, so
+        // assert on the ordering of whatever came back rather than on fixed ids
+        const isSorted = (values, direction, compare) =>
+            values.every((value, i) =>
+                i === 0 || (direction === 'desc'
+                    ? compare(values[i - 1], value) >= 0
+                    : compare(values[i - 1], value) <= 0))
+
+        const byNumber = (a, b) => a - b
+        const byName = (a, b) => a.toLowerCase().localeCompare(b.toLowerCase())
+
+        it('sorts all products by price', async () => {
+            const asc = await supertest(app).get('/products?sortby=price')
+            expect(asc.status).toBe(200)
+            expect(asc.body).not.toStrictEqual([])
+            expect(isSorted(asc.body.map(p => p.price), 'asc', byNumber)).toBe(true)
+
+            const desc = await supertest(app).get('/products?sortby=price&sort=desc')
+            expect(isSorted(desc.body.map(p => p.price), 'desc', byNumber)).toBe(true)
+        })
+
+        it('sorts all products by name, ignoring case', async () => {
+            const asc = await supertest(app).get('/products?sortby=name')
+            expect(asc.status).toBe(200)
+            expect(asc.body).not.toStrictEqual([])
+            expect(isSorted(asc.body.map(p => p.title), 'asc', byName)).toBe(true)
+
+            const desc = await supertest(app).get('/products?sortby=name&sort=desc')
+            expect(isSorted(desc.body.map(p => p.title), 'desc', byName)).toBe(true)
+        })
+
+        it('sorts a category by price and by name', async () => {
+            const byPrice = await supertest(app).get('/products/category/jewelery?sortby=price&sort=desc')
+            expect(byPrice.status).toBe(200)
+            expect(byPrice.body).not.toStrictEqual([])
+            expect(isSorted(byPrice.body.map(p => p.price), 'desc', byNumber)).toBe(true)
+
+            const byTitle = await supertest(app).get('/products/category/jewelery?sortby=name')
+            expect(isSorted(byTitle.body.map(p => p.title), 'asc', byName)).toBe(true)
+        })
+
+        it('sorts by price within the limit, not just the first N by id', async () => {
+            const all = await supertest(app).get('/products?sortby=price')
+            const limited = await supertest(app).get('/products?sortby=price&limit=3')
+            expect(limited.body).toHaveLength(3)
+            expect(isSorted(limited.body.map(p => p.price), 'asc', byNumber)).toBe(true)
+
+            // the three must come off the cheap end of the catalog. Compared
+            // against the median rather than all.body[2] because another worker
+            // can insert a product between these two requests.
+            const median = all.body[Math.floor(all.body.length / 2)].price
+            expect(limited.body[2].price).toBeLessThanOrEqual(median)
+        })
+
+        it('falls back to id when sortby is missing or unknown', async () => {
+            const none = await supertest(app).get('/products')
+            expect(isSorted(none.body.map(p => p.id), 'asc', byNumber)).toBe(true)
+
+            const bogus = await supertest(app).get('/products?sortby=nonsense')
+            expect(bogus.status).toBe(200)
+            expect(isSorted(bogus.body.map(p => p.id), 'asc', byNumber)).toBe(true)
+        })
+    })
+
     it("post a product", async () => {
         const response = await supertest(app).post('/products').set('Authorization', `Bearer ${adminToken}`).send({
             title: 'test',

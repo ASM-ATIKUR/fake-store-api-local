@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const User = require('../model/user');
 
 // Read lazily: server.js requires ./app (and therefore this module) before it
 // calls dotenv.config(), so reading process.env at load time would miss it.
@@ -20,17 +21,37 @@ module.exports.authenticate = (req, res, next) => {
 		return unauthorized(res, 'a bearer token should be provided');
 	}
 
+	let payload;
 	try {
-		const payload = jwt.verify(token, secret());
-		req.user = {
-			id: payload.id,
-			username: payload.user,
-			role: payload.role || 'customer',
-		};
-		next();
+		payload = jwt.verify(token, secret());
 	} catch (err) {
 		return unauthorized(res, 'token is invalid or expired');
 	}
+
+	// Nothing here sets an expiry, so a signed token would otherwise outlive the
+	// account forever. Re-read the user on every request: deactivating or deleting
+	// an account has to take effect immediately, and role changes shouldn't wait
+	// for a fresh login either.
+	User.findOne({ id: payload.id })
+		.select('id username role active')
+		.then((user) => {
+			if (!user) {
+				return unauthorized(res, 'the account for this token no longer exists');
+			}
+			if (user.active === false) {
+				return res.status(403).json({
+					status: 'error',
+					message: 'this account has been deactivated',
+				});
+			}
+			req.user = {
+				id: user.id,
+				username: user.username,
+				role: user.role || 'customer',
+			};
+			next();
+		})
+		.catch((err) => res.status(500).json({ status: 'error', message: err.message }));
 };
 
 module.exports.requireAdmin = (req, res, next) => {

@@ -1,6 +1,6 @@
 const supertest = require('supertest')
 const app = require('../app')
-const { CUSTOMER, loginAdmin, loginCustomer, createThrowawayUser } = require('./helpers/login')
+const { ADMIN, CUSTOMER, loginAdmin, loginCustomer, createThrowawayUser } = require('./helpers/login')
 
 const product = {
     title: 'test',
@@ -19,7 +19,8 @@ describe('authentication and authorization', () => {
         adminToken = await loginAdmin()
         customerToken = await loginCustomer()
 
-        const users = await supertest(app).get('/users')
+        // listing users is admin-only now
+        const users = await supertest(app).get('/users').set('Authorization', `Bearer ${adminToken}`)
         customerId = users.body.find((u) => u.username === CUSTOMER.username).id
     }, 30000)
 
@@ -48,6 +49,18 @@ describe('authentication and authorization', () => {
         it('rejects reading carts with no token', async () => {
             const response = await supertest(app).get('/carts')
             expect(response.status).toBe(401)
+        })
+
+        it('returns the role alongside the token so the UI can gate features', async () => {
+            const response = await supertest(app).post('/auth/login').send(CUSTOMER)
+            expect(response.status).toBe(200)
+            expect(response.body).toHaveProperty('token')
+            expect(response.body.role).toBe('customer')
+            expect(response.body.username).toBe(CUSTOMER.username)
+            expect(response.body.id).toBe(customerId)
+
+            const asAdmin = await supertest(app).post('/auth/login').send(ADMIN)
+            expect(asAdmin.body.role).toBe('admin')
         })
 
         it('leaves product reads public', async () => {
@@ -173,6 +186,28 @@ describe('authentication and authorization', () => {
     })
 
     describe('user account ownership', () => {
+        it('forbids a customer from listing every user', async () => {
+            const response = await supertest(app)
+                .get('/users')
+                .set('Authorization', `Bearer ${customerToken}`)
+            expect(response.status).toBe(403)
+        })
+
+        it("forbids reading another user's account", async () => {
+            const response = await supertest(app)
+                .get('/users/1')
+                .set('Authorization', `Bearer ${customerToken}`)
+            expect(response.status).toBe(403)
+        })
+
+        it('allows reading your own account', async () => {
+            const response = await supertest(app)
+                .get(`/users/${customerId}`)
+                .set('Authorization', `Bearer ${customerToken}`)
+            expect(response.status).toBe(200)
+            expect(response.body.username).toBe(CUSTOMER.username)
+        })
+
         it("forbids editing another user's account", async () => {
             const response = await supertest(app)
                 .patch('/users/1')

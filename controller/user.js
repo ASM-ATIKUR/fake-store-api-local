@@ -22,6 +22,10 @@ module.exports.getAllUser = (req, res) => {
 module.exports.getUser = (req, res) => {
 	const id = req.params.id;
 
+	if (!isOwnerOrAdmin(req, id)) {
+		return forbidden(res, 'you can only view your own account');
+	}
+
 	User.findOne({
 		id,
 	})
@@ -88,9 +92,11 @@ module.exports.editUser = (req, res) => {
 		forbidden(res, 'you can only modify your own account');
 	} else {
 		delete req.body.id;
-		// only an admin may change roles, otherwise anyone could promote themselves
+		// only an admin may change role or active, otherwise anyone could promote
+		// themselves or undo their own deactivation
 		if (req.user.role !== 'admin') {
 			delete req.body.role;
+			delete req.body.active;
 		}
 		User.findOneAndUpdate({ id: req.params.id }, toDotPaths(req.body), { new: true })
 			.select('-_id')
@@ -108,6 +114,42 @@ module.exports.editUser = (req, res) => {
 				res.status(500).json({ status: 'error', message: err.message });
 			});
 	}
+};
+
+// PATCH /users/:id/active — admin-only, body {active: true|false}
+module.exports.setUserActive = (req, res) => {
+	const active = (req.body || {}).active;
+
+	if (typeof active !== 'boolean') {
+		return res.status(400).json({
+			status: 'error',
+			message: 'active should be provided as true or false',
+		});
+	}
+	// authenticate rejects a deactivated token on the very next request, so an
+	// admin switching themselves off would be locked out with no way back in
+	if (active === false && Number(req.user.id) === Number(req.params.id)) {
+		return res.status(400).json({
+			status: 'error',
+			message: 'you cannot deactivate your own account',
+		});
+	}
+
+	User.findOneAndUpdate({ id: req.params.id }, { $set: { active } }, { new: true })
+		.select('-_id')
+		.then((user) => {
+			if (user) {
+				res.json(user);
+			} else {
+				res.status(404).json({
+					status: 'error',
+					message: 'user not found',
+				});
+			}
+		})
+		.catch((err) => {
+			res.status(500).json({ status: 'error', message: err.message });
+		});
 };
 
 module.exports.deleteUser = (req, res) => {

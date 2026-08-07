@@ -7,7 +7,21 @@
             </svg>
             Users</h2>
         <h3 id="u-all">Get all users</h3>
-        <pre><code>fetch(<span class="c-api">'https://fakestoreapi.com/users'</span>)
+        <p>
+            <span class="tips">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    class="feather feather-zap">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+            </span>Listing accounts is admin-only. A single account, an update and a delete are
+            open to the account's owner as well as to an admin, and signing up is open to anyone.
+            Each user carries a <span class="c-api">role</span> ('customer' or 'admin') and an
+            <span class="c-api">active</span> flag, both of which only an admin can change.
+        </p>
+        <pre><code>fetch(<span class="c-api">'https://fakestoreapi.com/users'</span>,{
+            headers:{ Authorization: <span class="c-api">`Bearer ${token}`</span> }
+        })
             .then(res=>res.json())
             .then(json=>console.log(json))</code></pre>
         <button class="show-output btn btn-outline">Show output</button>
@@ -372,6 +386,43 @@
             }
         </code></pre>
 
+
+
+        <h3 id="u-active">Activate or deactivate a user</h3>
+        <pre><code>fetch('<span class="c-api">https://fakestoreapi.com/users/6/active'</span>,{
+            method:"PATCH",
+            headers:{ Authorization: <span class="c-api">`Bearer ${token}`</span> },
+            body:JSON.stringify({
+                active: false
+            })
+        })
+            .then(res=>res.json())
+            .then(json=>console.log(json))</code></pre>
+        <p>
+            <span class="tips">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    class="feather feather-zap">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+            </span>Admin only. Switching an account off is the reversible alternative to deleting
+            it: a deactivated user cannot log in, and any token it already holds stops working on
+            the very next request, since tokens here carry no expiry. Send
+            <span class="c-api">{"active": true}</span> to turn it back on. An admin cannot
+            deactivate their own account - nothing would let them back in.
+        </p>
+        <button class="show-output btn btn-outline">Show output</button>
+        <pre class="output-result"><code>
+            <span class="c-comment">//output</span>
+            {
+                id:6,
+                email:'John@gmail.com',
+                username:'johnd',
+                <span class="c-comment">/*...*/</span>
+                role:'customer',
+                active:false
+            }
+        </code></pre>
 
 
         <h3 id="u-delete">Delete a user</h3>

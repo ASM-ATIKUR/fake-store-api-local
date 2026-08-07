@@ -2,14 +2,26 @@ const Product = require('../model/product');
 const nextId = require('../util/id');
 const toDotPaths = require('../util/flatten');
 
+// ?sortby= picks the column, ?sort=asc|desc the direction. "name" is the
+// product's title; anything unrecognised falls back to id, so the old
+// id-ordered behaviour is what you get when sortby is absent.
+const SORT_FIELDS = { id: 'id', name: 'title', title: 'title', price: 'price' };
+
+const sortField = (query) => SORT_FIELDS[String(query.sortby || '').toLowerCase()] || 'id';
+
+// sorting titles without this puts every capitalised title ahead of every
+// lowercase one, which reads as broken alphabetical order
+const applySort = (mongooseQuery, query) => {
+	const field = sortField(query);
+	const direction = query.sort == 'desc' ? -1 : 1;
+	const sorted = mongooseQuery.sort({ [field]: direction });
+	return field === 'title' ? sorted.collation({ locale: 'en', strength: 2 }) : sorted;
+};
+
 module.exports.getAllProducts = (req, res) => {
 	const limit = Number(req.query.limit) || 0;
-	const sort = req.query.sort == 'desc' ? -1 : 1;
 
-	Product.find()
-		.select(['-_id'])
-		.limit(limit)
-		.sort({ id: sort })
+	applySort(Product.find().select(['-_id']).limit(limit), req.query)
 		.then((products) => {
 			res.json(products);
 		})
@@ -40,14 +52,8 @@ module.exports.getProductCategories = (req, res) => {
 module.exports.getProductsInCategory = (req, res) => {
 	const category = req.params.category;
 	const limit = Number(req.query.limit) || 0;
-	const sort = req.query.sort == 'desc' ? -1 : 1;
 
-	Product.find({
-		category,
-	})
-		.select(['-_id'])
-		.limit(limit)
-		.sort({ id: sort })
+	applySort(Product.find({ category }).select(['-_id']).limit(limit), req.query)
 		.then((products) => {
 			res.json(products);
 		})

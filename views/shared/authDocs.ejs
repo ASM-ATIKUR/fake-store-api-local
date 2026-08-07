@@ -20,7 +20,10 @@
         <pre class="output-result"><code>
             <span class="c-comment">//output</span>
         {
-            token: "eyJhbGciOiJIUzI1NiIsInR"
+            token: "eyJhbGciOiJIUzI1NiIsInR",
+            id: 1,
+            username: "johnd",
+            role: "admin"
         }
         </code></pre>
 
@@ -34,4 +37,18 @@
             </span>
             You can use any of the users' username and password available in users API to get token.
             any other usernames return error.
+        </p>
+
+        <p>
+            <span class="tips">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    class="feather feather-zap">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+            </span>
+            <span class="c-api">role</span> comes back next to the token so your UI can show or
+            hide admin features without decoding the JWT. Treat it as a display hint only - the
+            server re-reads the account on every request and never trusts what the client sends
+            back. An account an admin has deactivated gets a 403 here instead of a token.
         </p>

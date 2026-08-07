@@ -43,6 +43,12 @@ const userSchema = new schema({
         type:String,
         enum:['customer','admin'],
         default:'customer'
+    },
+    // an admin can deactivate an account instead of deleting it: a deactivated
+    // user cannot log in, and any token it already holds stops working
+    active:{
+        type:Boolean,
+        default:true
     }
 })
 

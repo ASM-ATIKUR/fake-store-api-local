@@ -99,7 +99,16 @@
                     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                 </svg>
             </span>Default value is in ascending mode, you can use with 'desc' or 'asc' as you want.
+            Add <span class="c-api">sortby</span> to choose the column it orders by:
+            <span class="c-api">name</span> (the product title), <span class="c-api">price</span>
+            or <span class="c-api">id</span>, which is the default. It sorts before
+            <span class="c-api">limit</span> applies, so
+            <span class="c-api">?sortby=price&amp;limit=3</span> really is the three cheapest
+            products, and sorting by name ignores case.
         </p>
+        <pre><code>fetch('<span class="c-api">https://fakestoreapi.com/products?sortby=price&amp;limit=5'</span>)
+            .then(res=>res.json())
+            .then(json=>console.log(json))</code></pre>
         <button class="show-output btn btn-outline">Show output</button>
         <pre class="output-result"><code>
             <span class="c-comment">//output</span>
@@ -154,7 +163,8 @@
                     class="feather feather-zap">
                     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                 </svg>
-            </span>You can also use limit(Number) and sort(asc|desc) as a query string to get your ideal results
+            </span>You can also use limit(Number), sort(asc|desc) and sortby(name|price|id) as a
+            query string to get your ideal results, exactly as on the full product list.
         </p>
         <button class="show-output btn btn-outline">Show output</button>
         <pre class="output-result"><code>

@@ -11,6 +11,7 @@ describe('testing cart API',()=>{
     let token
     let customerToken
     let customerId
+    let product
     const auth = (request) => request.set('Authorization', `Bearer ${token}`)
     const asCustomer = (request) => request.set('Authorization', `Bearer ${customerToken}`)
 
@@ -22,14 +23,23 @@ describe('testing cart API',()=>{
         // GET /carts mints one if this user inherited none, so there is always
         // at least one cart of its own to read back
         await asCustomer(supertest(app).get('/carts'))
+
+        // A product of our own: product.spec.js runs in a parallel worker and
+        // deletes from the catalog, so anything picked out of GET /products can
+        // vanish between reading it and putting it in a cart.
+        const created = await auth(supertest(app).post('/products')).send({
+            title: 'cart spec fixture',
+            price: 9.99,
+            description: 'owned by cart.spec.js',
+            image: 'fixture.png',
+            category: 'cart spec fixture',
+        })
+        product = created.body
     }, 30000)
 
-    // product.spec.js deletes products, so never hard-code an id here.
-    // product reads are public, no token needed
-    const anyProduct = async () => {
-        const response = await supertest(app).get('/products?limit=1')
-        return response.body[0]
-    }
+    // the whole file shares one product, so quantities accumulate across tests -
+    // assert relative to what came back, not to an absolute number
+    const anyProduct = async () => product
 
     // a cart the calling customer owns
     const myCart = async () => {
