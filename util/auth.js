@@ -43,6 +43,17 @@ module.exports.requireAdmin = (req, res, next) => {
 	next();
 };
 
+// carts belong to shoppers; an admin manages the catalog, not a basket
+module.exports.requireCustomer = (req, res, next) => {
+	if (!req.user || req.user.role !== 'customer') {
+		return res.status(403).json({
+			status: 'error',
+			message: 'carts are customer-only',
+		});
+	}
+	next();
+};
+
 module.exports.isOwnerOrAdmin = (req, userId) =>
 	!!req.user && (req.user.role === 'admin' || Number(req.user.id) === Number(userId));
 

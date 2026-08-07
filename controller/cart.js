@@ -1,10 +1,11 @@
 const Cart = require('../model/cart');
 const Product = require('../model/product');
 const nextId = require('../util/id');
-const { isOwnerOrAdmin, forbidden } = require('../util/auth');
+const { forbidden } = require('../util/auth');
 
-// carts belong to shoppers; an admin manages the catalog, not a basket
-const CUSTOMER_ONLY = 'admins cannot add, update or delete products in a cart';
+// the router already turned away everyone but customers, so ownership is the
+// only question left: no role can reach a cart that isn't its own
+const isMine = (req, userId) => Number(req.user.id) === Number(userId);
 
 // strips the mongo ids the API never exposes
 const toResponse = (cart) => {
@@ -36,22 +37,14 @@ module.exports.getAllCarts = (req, res) => {
 	const startDate = req.query.startdate || new Date('1970-1-1');
 	const endDate = req.query.enddate || new Date();
 
+	// a customer only ever sees their own carts
 	const filter = {
+		userId: req.user.id,
 		date: { $gte: new Date(startDate), $lt: new Date(endDate) },
 	};
-	// a customer only ever sees their own carts
-	if (req.user.role !== 'admin') {
-		filter.userId = req.user.id;
-	}
 
 	const listCarts = () =>
 		Cart.find(filter).select('-_id -products._id').limit(limit).sort({ id: sort });
-
-	if (req.user.role === 'admin') {
-		return listCarts()
-			.then((carts) => res.json(carts))
-			.catch(failed(res));
-	}
 
 	// a shopper always has somewhere to put things. The count deliberately ignores
 	// the date filter: endDate was captured above, so a cart created now would fall
@@ -72,7 +65,7 @@ module.exports.getCartsbyUserid = (req, res) => {
 	const startDate = req.query.startdate || new Date('1970-1-1');
 	const endDate = req.query.enddate || new Date();
 
-	if (!isOwnerOrAdmin(req, userId)) {
+	if (!isMine(req, userId)) {
 		return forbidden(res, 'you can only access your own carts');
 	}
 
@@ -101,7 +94,7 @@ module.exports.getSingleCart = (req, res) => {
 					message: 'cart not found',
 				});
 			}
-			if (!isOwnerOrAdmin(req, cart.userId)) {
+			if (!isMine(req, cart.userId)) {
 				return forbidden(res, 'you can only access your own carts');
 			}
 			res.json(toResponse(cart));
@@ -112,9 +105,6 @@ module.exports.getSingleCart = (req, res) => {
 };
 
 module.exports.addProductToCart = (req, res) => {
-	if (req.user.role === 'admin') {
-		return forbidden(res, CUSTOMER_ONLY);
-	}
 	if (!req.body || req.body.productId == null) {
 		return res.status(400).json({
 			status: 'error',
@@ -160,9 +150,6 @@ module.exports.addProductToCart = (req, res) => {
 };
 
 module.exports.editProductInCart = (req, res) => {
-	if (req.user.role === 'admin') {
-		return forbidden(res, CUSTOMER_ONLY);
-	}
 	if (!req.body || req.body.quantity == null) {
 		return res.status(400).json({
 			status: 'error',
@@ -203,10 +190,6 @@ module.exports.editProductInCart = (req, res) => {
 };
 
 module.exports.deleteCartProduct = (req, res) => {
-	if (req.user.role === 'admin') {
-		return forbidden(res, CUSTOMER_ONLY);
-	}
-
 	const productId = Number(req.params.productId);
 
 	// resolving the cart from the token makes reaching someone else's impossible
@@ -239,9 +222,6 @@ module.exports.deleteCartProduct = (req, res) => {
 };
 
 module.exports.deleteCart = (req, res) => {
-	if (req.user.role === 'admin') {
-		return forbidden(res, CUSTOMER_ONLY);
-	}
 	if (req.params.id == null) {
 		res.json({
 			status: 'error',
@@ -258,7 +238,7 @@ module.exports.deleteCart = (req, res) => {
 					});
 					return null;
 				}
-				if (!isOwnerOrAdmin(req, cart.userId)) {
+				if (!isMine(req, cart.userId)) {
 					forbidden(res, 'you can only delete your own carts');
 					return null;
 				}

@@ -2,31 +2,56 @@ const supertest = require('supertest')
 const app = require('../app')
 const { loginAdmin, createThrowawayUser } = require('./helpers/login')
 
-// Reads run as admin so they can reach carts belonging to any user.
-// Writes are customer-only now and always act on the caller's own cart, so they
-// run as a throwaway customer - never kevinryan, whose cart authorization.spec.js
-// also touches. Ownership rules are covered in authorization.spec.js
+// Carts are customer-only end to end now - an admin gets 403 on reads as well as
+// writes - so every read here runs as the same throwaway customer that does the
+// writes, against carts it owns. Never kevinryan, whose cart authorization.spec.js
+// also touches: jest runs spec files in parallel and two writers race on $push.
+// Ownership rules are covered in authorization.spec.js
 describe('testing cart API',()=>{
     let token
     let customerToken
+    let customerId
     const auth = (request) => request.set('Authorization', `Bearer ${token}`)
     const asCustomer = (request) => request.set('Authorization', `Bearer ${customerToken}`)
 
     beforeAll(async () => {
         token = await loginAdmin()
-        customerToken = (await createThrowawayUser()).token
+        const customer = await createThrowawayUser()
+        customerToken = customer.token
+        customerId = customer.id
+        // GET /carts mints one if this user inherited none, so there is always
+        // at least one cart of its own to read back
+        await asCustomer(supertest(app).get('/carts'))
     }, 30000)
 
+    // product.spec.js deletes products, so never hard-code an id here.
+    // product reads are public, no token needed
+    const anyProduct = async () => {
+        const response = await supertest(app).get('/products?limit=1')
+        return response.body[0]
+    }
+
+    // a cart the calling customer owns
+    const myCart = async () => {
+        const response = await asCustomer(supertest(app).get('/carts'))
+        return response.body[0]
+    }
+
+    // every cart in the response belongs to the caller
+    const allMine = (carts) => carts.every(cart => cart.userId === customerId)
+
     it('get all carts',async()=>{
-        const response = await auth(supertest(app).get('/carts'))
+        const response = await asCustomer(supertest(app).get('/carts'))
         expect(response.status).toBe(200)
         console.log(response.body)
         expect(response.body).not.toEqual([]);
+        expect(allMine(response.body)).toBe(true);
     })
 
 
     it('get a single cart',async ()=>{
-        const response = await auth(supertest(app).get('/carts/2'))
+        const cart = await myCart()
+        const response = await asCustomer(supertest(app).get(`/carts/${cart.id}`))
         expect(response.status).toBe(200);
         console.log(response.body)
         expect(response.body).not.toEqual({});
@@ -38,50 +63,50 @@ describe('testing cart API',()=>{
         })
     })
 
+    // the throwaway user's own carts are stamped at signup time, so every date
+    // window here has to reach the present rather than the seeded 2019-2020 range
+    const RANGE = 'startdate=2019-12-10&enddate=2100-01-01'
+
     it("get carts in a date range and limit and sort", async () => {
-        const response = await auth(supertest(app).get("/carts?limit=2&sort=desc&startdate=2019-12-10&enddate=2020-10-10"))
+        const response = await asCustomer(supertest(app).get(`/carts?limit=2&sort=desc&${RANGE}`))
         expect(response.status).toBe(200)
         console.log('get with querystring', response.body)
         expect(response.body).not.toEqual([])
+        expect(response.body.length).toBeLessThanOrEqual(2)
+        expect(allMine(response.body)).toBe(true)
     })
 
 
 
 
     it("get carts in for user in date range", async () => {
-        const response = await auth(supertest(app).get("/carts/user/1?startdate=2019-12-10&enddate=2020-10-10"))
+        const response = await asCustomer(supertest(app).get(`/carts/user/${customerId}?${RANGE}`))
         expect(response.status).toBe(200)
         console.log('get with date range', response.body)
         expect(response.body).not.toEqual([])
     })
 
     it("get carts in for user without start date", async () => {
-        const response = await auth(supertest(app).get("/carts/user/1?enddate=2020-10-10"))
+        const response = await asCustomer(supertest(app).get(`/carts/user/${customerId}?enddate=2100-01-01`))
         expect(response.status).toBe(200)
         console.log('get user cart without start date', response.body)
         expect(response.body).not.toEqual([])
     })
 
     it("get carts in for user without end date", async () => {
-        const response = await auth(supertest(app).get("/carts/user/1?startdate=2019-12-10"))
+        const response = await asCustomer(supertest(app).get(`/carts/user/${customerId}?startdate=2019-12-10`))
         expect(response.status).toBe(200)
         console.log('get user cart without end date', response.body)
         expect(response.body).not.toEqual([])
     })
 
     it("get carts in for user", async () => {
-        const response = await auth(supertest(app).get("/carts/user/1"))
+        const response = await asCustomer(supertest(app).get(`/carts/user/${customerId}`))
         expect(response.status).toBe(200)
         console.log('get with userid', response.body)
         expect(response.body).not.toEqual([])
     })
 
-
-    // product.spec.js deletes products, so never hard-code an id here
-    const anyProduct = async () => {
-        const response = await auth(supertest(app).get('/products?limit=1'))
-        return response.body[0]
-    }
 
     // the line the caller just touched, read back off the response
     const lineFor = (response, productId) =>
@@ -212,7 +237,23 @@ describe('testing cart API',()=>{
     })
 
 
-    describe('admin is locked out of cart writes', () => {
+    describe('admin is locked out of carts', () => {
+        it('cannot list carts', async () => {
+            const response = await auth(supertest(app).get('/carts'))
+            expect(response.status).toBe(403)
+            expect(response.body.message).toMatch(/customer-only/)
+        })
+
+        it('cannot read a single cart', async () => {
+            const response = await auth(supertest(app).get('/carts/1'))
+            expect(response.status).toBe(403)
+        })
+
+        it("cannot read a user's carts", async () => {
+            const response = await auth(supertest(app).get('/carts/user/1'))
+            expect(response.status).toBe(403)
+        })
+
         it('cannot add a product', async () => {
             const product = await anyProduct()
             const response = await auth(supertest(app).post('/carts')).send({
@@ -220,7 +261,6 @@ describe('testing cart API',()=>{
                 quantity:1
             })
             expect(response.status).toBe(403)
-            expect(response.body.message).toMatch(/admins cannot/)
         })
 
         it('cannot update a product', async () => {

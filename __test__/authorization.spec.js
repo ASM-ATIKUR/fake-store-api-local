@@ -120,14 +120,6 @@ describe('authentication and authorization', () => {
             })
         })
 
-        it('lets an admin see carts belonging to other users', async () => {
-            const response = await supertest(app)
-                .get('/carts')
-                .set('Authorization', `Bearer ${adminToken}`)
-            expect(response.status).toBe(200)
-            expect(response.body.some((cart) => cart.userId !== 1)).toBe(true)
-        })
-
         it('ignores a userId in the body and adds to the caller own cart', async () => {
             const products = await supertest(app).get('/products?limit=1')
             const product = products.body[0]
@@ -144,22 +136,31 @@ describe('authentication and authorization', () => {
         })
 
         it("forbids deleting another user's cart, and leaves it intact", async () => {
-            // seeded cart 1 belongs to johnd (userId 1). No spec mutates it: cart
-            // writes are customer-only and every customer spec uses its own user.
-            const target = await supertest(app)
-                .get('/carts/1')
-                .set('Authorization', `Bearer ${adminToken}`)
-            expect(target.status).toBe(200)
+            // two throwaway shoppers: the owner is the only one who can read the
+            // cart back, so the victim has to be a user this spec controls
+            const owner = await createThrowawayUser()
+            const mine = await supertest(app)
+                .get('/carts')
+                .set('Authorization', `Bearer ${owner.token}`)
+            expect(mine.status).toBe(200)
+            const target = mine.body[0].id
 
             const response = await supertest(app)
-                .delete('/carts/1')
+                .delete(`/carts/${target}`)
                 .set('Authorization', `Bearer ${customerToken}`)
             expect(response.status).toBe(403)
 
             const stillThere = await supertest(app)
-                .get('/carts/1')
-                .set('Authorization', `Bearer ${adminToken}`)
+                .get(`/carts/${target}`)
+                .set('Authorization', `Bearer ${owner.token}`)
             expect(stillThere.status).toBe(200)
+        })
+
+        it('forbids an admin from reading carts', async () => {
+            const response = await supertest(app)
+                .get('/carts')
+                .set('Authorization', `Bearer ${adminToken}`)
+            expect(response.status).toBe(403)
         })
 
         it('forbids an admin from writing to carts', async () => {

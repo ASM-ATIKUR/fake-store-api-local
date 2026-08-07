@@ -1,10 +1,11 @@
 const express = require('express')
 const router = express.Router()
 const cart = require('../controller/cart')
-const { authenticate } = require('../util/auth')
+const { authenticate, requireCustomer } = require('../util/auth')
 
-// every cart route is private: carts are per-user data
-router.use(authenticate)
+// every cart route is private: carts are per-user data, and they belong to
+// shoppers only — an admin gets 403 on reads as well as writes
+router.use(authenticate, requireCustomer)
 
 router.get('/',cart.getAllCarts)
 router.get('/:id',cart.getSingleCart)

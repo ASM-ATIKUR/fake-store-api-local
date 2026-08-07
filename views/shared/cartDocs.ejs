@@ -19,8 +19,9 @@
             class="feather feather-zap">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
         </svg>
-    </span>Every cart route needs a token. You get back your own carts; an admin gets
-    everyone's. If you have no cart at all, an empty one is created for you and returned.
+    </span>Every cart route needs a customer token — an admin gets a 403 on carts, reads
+    included. You get back your own carts. If you have no cart at all, an empty one is
+    created for you and returned.
 </p>
 <button class="show-output btn btn-outline">Show output</button>
 <pre class="output-result"><code>
@@ -223,7 +224,7 @@
     <span class="c-api">quantity</span> defaults to 1, and adding a product that is already
     in the cart increases its quantity instead of creating a second line.
     <span class="c-api">priceAtAdd</span> is stamped from the catalog, so anything you send
-    for it is ignored. Cart writes are customer-only: an admin token gets a 403.
+    for it is ignored. Carts are customer-only: an admin token gets a 403.
     remember that the data will really be inserted into the database.
 </p>
 <button class="show-output btn btn-outline">Show output</button>
@@ -331,8 +332,8 @@
             class="feather feather-zap">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
         </svg>
-    </span>You can only delete a cart you own, and an admin token gets a 403 like every other
-    cart write. The cart will really be deleted from the database and it will return you the deleted cart.
+    </span>You can only delete a cart you own, and an admin token gets a 403 like on every other
+    cart route. The cart will really be deleted from the database and it will return you the deleted cart.
 </p>
 <button class="show-output btn btn-outline">Show output</button>
 <pre class="output-result"><code>

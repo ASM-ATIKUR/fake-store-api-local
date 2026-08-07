@@ -46,7 +46,7 @@ Who can do what:
 | `GET /products/*`, `GET /users/*`, docs pages | public                                                        |
 | `POST /users` (signup), `POST /auth/login`    | public                                                        |
 | `POST/PUT/PATCH/DELETE /products`             | **admin** only                                                |
-| all `/carts` routes                           | any logged-in user, limited to **their own** carts; admin sees all |
+| all `/carts` routes                           | **customers** only, limited to **their own** carts; 403 for admin |
 | `PUT/PATCH/DELETE /users/:id`                 | the **owner** of that account, or an admin                    |
 
 Missing or invalid token → `401`. Valid token without the right privileges → `403`.
@@ -241,8 +241,9 @@ always filled in server-side from the catalog — any value you send is ignored 
 absent on the carts loaded by `npm run seed`, since the upstream fakestoreapi data
 carries no price on cart lines.
 
-**Cart writes are customer-only.** An admin manages the catalog, not a basket, so every
-write below returns 403 for an admin token. Admins can still read any cart.
+**Carts are customer-only.** An admin manages the catalog, not a basket, so every route
+below — reads included — returns 403 for an admin token. Within customers, you only ever
+reach your own carts.
 
 **Writes always act on your own cart**, resolved from your token — your most recent cart
 by `date`. There is no cart id in a write path, and `userId` and `date` are never taken
@@ -251,7 +252,7 @@ returns it.
 
 GET:
 
-- /carts (your carts; an admin sees everyone's)
+- /carts (your carts)
 - /carts/1 (get specific cart based on id)
 - /carts?startdate=2020-10-03&enddate=2020-12-12 (get carts in date range)
 - /carts/user/1 (get a user cart)
