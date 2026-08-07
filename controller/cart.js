@@ -1,6 +1,6 @@
 const Cart = require('../model/cart');
 const Product = require('../model/product');
-const nextId = require('../util/id');
+const saveWithFreshId = require('../util/save');
 const { forbidden } = require('../util/auth');
 
 // the router already turned away everyone but customers, so ownership is the
@@ -19,8 +19,10 @@ const toResponse = (cart) => {
 // seeded users own several carts, so "my cart" needs a deterministic pick.
 const findMyCart = (userId) => Cart.findOne({ userId }).sort({ date: -1, id: -1 });
 
+// retries if a parallel request grabbed the same id first — model/cart.js has a
+// unique index on it, so the collision surfaces as a duplicate-key error
 const createEmptyCart = (userId) =>
-	nextId(Cart).then((id) => new Cart({ id, userId, date: new Date(), products: [] }).save());
+	saveWithFreshId(Cart, (id) => new Cart({ id, userId, date: new Date(), products: [] }));
 
 const myCartOrNew = (userId) =>
 	findMyCart(userId).then((cart) => cart || createEmptyCart(userId));

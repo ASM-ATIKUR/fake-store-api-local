@@ -35,7 +35,7 @@ Unlike the hosted FakeStoreAPI, this local copy enforces the token it hands out.
 const { token, id, username, role } = await fetch("/auth/login", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ username: "johnd", password: "m38rmF$" }),
+  body: JSON.stringify({ username: "admin", password: "123" }),
 }).then((res) => res.json());
 
 fetch("/carts", { headers: { Authorization: `Bearer ${token}` } });
@@ -67,9 +67,36 @@ holds stops working on the next request — tokens here carry no expiry, so ever
 authenticated request re-reads the user. `{"active": true}` puts it back. An admin cannot
 deactivate their own account (`400`), since nothing would let them back in.
 
-`npm run seed` creates exactly two accounts: `johnd` / `m38rmF$` (id 1, **admin**) and
-`kevinryan` / `kev02937@` (id 3, **customer**). Sign up with `POST /users` for more.
+`npm run seed` creates exactly two accounts: `admin` / `123` (id 1, **admin**) and
+`customer` / `123` (id 3, **customer**). Sign up with `POST /users` for more.
 The signing secret comes from `JWT_SECRET` in `.env`.
+
+### Seed data
+
+`npm run seed` wipes the three collections and reloads them from `data/seed-data.json`,
+a fixture committed to the repo. It needs no network and gives the same database every
+time — `npm test` runs it first. The fixture holds:
+
+| | |
+| --- | --- |
+| products | all 20 from upstream |
+| users    | two — `admin` (id 1) and `customer` (id 3), both with the password `123` |
+| carts    | one, id 1, owned by `customer` |
+
+Only one cart, and it belongs to the customer, because cart routes are customer-only —
+a cart owned by the admin would be unreachable by every route in the API.
+
+`npm run seed:fetch` rebuilds that JSON from the live
+[fakestoreapi.com](https://fakestoreapi.com) — the one command here that needs the
+network. Run it when you want fresher data and commit the result.
+
+The two accounts take their **profile** (name, email, address, phone) from upstream but
+their **username, password and role are set by the script**, not inherited. That is what
+makes the fixture reproducible: fakestoreapi serves two different datasets — the same
+people under the same ids, but with different usernames and passwords depending on which
+one you get. Selecting by id and stamping the login locally gives the same fixture
+either way. To change the credentials, edit `SEED_USERS` in
+`scripts/fetch-seed-data.js` and `__test__/helpers/login.js` together.
 
 ## How to
 
@@ -270,9 +297,9 @@ fields:
 once per cart.
 
 `priceAtAdd` is the product's price at the moment it was added to the cart. It is
-always filled in server-side from the catalog — any value you send is ignored — and is
-absent on the carts loaded by `npm run seed`, since the upstream fakestoreapi data
-carries no price on cart lines.
+always filled in server-side from the catalog — any value you send is ignored. The
+seeded cart carries it too: upstream fakestoreapi has no price on its cart lines, so
+`npm run seed:fetch` stamps it from the catalog when it builds the fixture.
 
 **Carts are customer-only.** An admin manages the catalog, not a basket, so every route
 below — reads included — returns 403 for an admin token. Within customers, you only ever

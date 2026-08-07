@@ -4,7 +4,7 @@ const { loginAdmin, createThrowawayUser } = require('./helpers/login')
 
 // Carts are customer-only end to end now - an admin gets 403 on reads as well as
 // writes - so every read here runs as the same throwaway customer that does the
-// writes, against carts it owns. Never kevinryan, whose cart authorization.spec.js
+// writes, against carts it owns. Never the seeded customer, whose cart authorization.spec.js
 // also touches: jest runs spec files in parallel and two writers race on $push.
 // Ownership rules are covered in authorization.spec.js
 describe('testing cart API',()=>{
@@ -294,9 +294,9 @@ describe('testing cart API',()=>{
         const fresh = await createThrowawayUser()
         const asFresh = (request) => request.set('Authorization', `Bearer ${fresh.token}`)
 
-        // A new user id can collide with a seeded cart's userId - seed.js keeps only
-        // users 1 and 3 but seeds carts for userIds 1,2,3,4,8. Clear whatever they
-        // inherited so "has no cart" is actually true.
+        // The fixture seeds one cart, for userId 3, and new ids are always higher,
+        // so nothing should be inherited today. Clear anything that is, so "has no
+        // cart" stays actually true if data/seed-data.json ever grows.
         const inherited = await asFresh(supertest(app).get('/carts'))
         for (const cart of inherited.body) {
             await asFresh(supertest(app).delete(`/carts/${cart.id}`))

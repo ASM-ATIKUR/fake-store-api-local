@@ -6,7 +6,8 @@
   "scripts": {
     "test": "jest",
     "start": "node server.js",
-    "seed": "node seed.js"
+    "seed": "node seed.js",
+    "seed:fetch": "node scripts/fetch-seed-data.js"
   },
   "author": "",
   "license": "ISC",

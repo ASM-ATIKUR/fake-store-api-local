@@ -1,13 +1,11 @@
 const supertest = require('supertest')
 const app = require('../app')
 const jwt = require('jsonwebtoken')
+const { ADMIN } = require('./helpers/login')
 
 describe('testing auth API',()=>{
     it('login with valid credentials',async()=>{
-        const response = await supertest(app).post('/auth/login').send({
-            username:'johnd',
-            password:'m38rmF$'
-        })
+        const response = await supertest(app).post('/auth/login').send(ADMIN)
         expect(response.status).toBe(200)
         console.log(response.body)
         expect(response.body).toHaveProperty('token')
@@ -15,13 +13,13 @@ describe('testing auth API',()=>{
         const payload = jwt.verify(response.body.token, process.env.JWT_SECRET || 'secret_key')
         expect(payload).toHaveProperty('id')
         expect(payload).toHaveProperty('role')
-        expect(payload.user).toBe('johnd')
+        expect(payload.user).toBe(ADMIN.username)
     },30000)
 
 
     it('login with a wrong password',async()=>{
         const response = await supertest(app).post('/auth/login').send({
-            username:'johnd',
+            username:ADMIN.username,
             password:'not-the-password'
         })
         expect(response.status).toBe(401)
@@ -31,7 +29,7 @@ describe('testing auth API',()=>{
 
     it('login without a password',async()=>{
         const response = await supertest(app).post('/auth/login').send({
-            username:'johnd'
+            username:ADMIN.username
         })
         expect(response.status).toBe(400)
         expect(response.body).not.toHaveProperty('token')

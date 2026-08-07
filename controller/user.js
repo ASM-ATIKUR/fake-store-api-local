@@ -1,5 +1,5 @@
 const User = require('../model/user');
-const nextId = require('../util/id');
+const saveWithFreshId = require('../util/save');
 const toDotPaths = require('../util/flatten');
 const { isOwnerOrAdmin, forbidden } = require('../util/auth');
 
@@ -45,8 +45,9 @@ module.exports.addUser = (req, res) => {
 	} else {
 		const name = req.body.name || {};
 		const address = req.body.address || {};
-		nextId(User)
-			.then((id) =>
+		saveWithFreshId(
+			User,
+			(id) =>
 				new User({
 					id,
 					email: req.body.email,
@@ -67,8 +68,8 @@ module.exports.addUser = (req, res) => {
 						},
 					},
 					phone: req.body.phone,
-				}).save()
-			)
+				})
+		)
 			.then((user) => {
 				const { _id, ...rest } = user.toObject();
 				res.json(rest);

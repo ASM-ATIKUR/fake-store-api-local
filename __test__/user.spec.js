@@ -1,6 +1,6 @@
 const supertest = require('supertest')
 const app = require('../app')
-const { loginAdmin, login, createThrowawayUser } = require('./helpers/login')
+const { ADMIN, loginAdmin, login, createThrowawayUser } = require('./helpers/login')
 
 // Reading users is admin-only now, so every read here carries the admin token.
 describe('testing user API',()=>{
@@ -49,7 +49,7 @@ describe('testing user API',()=>{
         const response = await supertest(app).post('/users').send({
             email:'scratch@gmail.com',
             username:'scratchuser',
-            password:'m38rmF$',
+            password:'pw123456',
             name:{
                 firstname:'John',
                 lastname:'Doe'
@@ -220,8 +220,8 @@ describe('testing user API',()=>{
             const response = await setActive(1, { active: false })
             expect(response.status).toBe(400)
 
-            // and johnd is still usable - every other suite logs in as them
-            const stillWorks = await login('johnd', 'm38rmF$')
+            // and the admin is still usable - every other suite logs in as them
+            const stillWorks = await login(ADMIN.username, ADMIN.password)
             expect(stillWorks).toBeTruthy()
         })
     })

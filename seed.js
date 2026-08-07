@@ -12,21 +12,22 @@ if (fs.existsSync('.env.local')) {
 const myEnv = dotenv.config();
 dotenvExpand.expand(myEnv);
 
-const API = 'https://fakestoreapi.com';
+// Seeding is offline: the data comes from the committed fixture, not the live
+// fakestoreapi. Refresh it with `npm run seed:fetch` (scripts/fetch-seed-data.js),
+// which is the only thing in the repo that hits the network.
+const seedData = require('./data/seed-data.json');
 
-// only two users are seeded: one admin and one customer.
-const ADMIN_USERNAME = 'johnd';
-const CUSTOMER_USERNAME = 'kevinryan';
-
-async function fetchJson(path) {
-	const res = await fetch(`${API}${path}`);
-	if (!res.ok) {
-		throw new Error(`GET ${path} failed with status ${res.status}`);
-	}
-	return res.json();
-}
+// exactly two users (one admin, one customer) and one cart, owned by the customer
+const ADMIN_USERNAME = 'admin';
+const CUSTOMER_USERNAME = 'customer';
 
 async function seedDatabase() {
+	// every spec logs in as these two, so an empty or half-written fixture should
+	// fail here rather than as a wall of confusing 401s
+	if (!seedData.products.length || !seedData.users.length) {
+		throw new Error('data/seed-data.json has no products or no users; run `npm run seed:fetch`');
+	}
+
 	mongoose.set('useFindAndModify', false);
 	mongoose.set('useUnifiedTopology', true);
 	await mongoose.connect(process.env.DATABASE_URL, { useNewUrlParser: true });
@@ -34,27 +35,20 @@ async function seedDatabase() {
 	console.log('clearing collections...');
 	await Promise.all([Product.deleteMany({}), Cart.deleteMany({}), User.deleteMany({})]);
 
-	console.log('fetching products...');
-	await Product.insertMany(await fetchJson('/products'));
+	// Build indexes against the now-empty collections. The unique index on user.id
+	// cannot be created over a collection that already holds a duplicate, and a DB
+	// seeded before that index existed may well hold one - clearing first is what
+	// makes this recoverable rather than a permanent error on every connect.
+	await Promise.all([Product.syncIndexes(), Cart.syncIndexes(), User.syncIndexes()]);
 
-	console.log('fetching carts...');
-	await Cart.insertMany(await fetchJson('/carts'));
+	console.log('seeding products...');
+	await Product.insertMany(seedData.products);
 
-	console.log('fetching users...');
-	const allUsers = await fetchJson('/users');
-	const admin = allUsers.find((user) => user.username === ADMIN_USERNAME);
-	const customer = allUsers.find((user) => user.username === CUSTOMER_USERNAME);
-	if (!admin || !customer) {
-		throw new Error(
-			`upstream is missing ${ADMIN_USERNAME} and/or ${CUSTOMER_USERNAME}; cannot seed users`
-		);
-	}
+	console.log('seeding users...');
+	await User.insertMany(seedData.users);
 
-	// upstream data carries no roles, so mint an admin for the protected routes
-	await User.insertMany([
-		{ ...admin, role: 'admin' },
-		{ ...customer, role: 'customer' },
-	]);
+	console.log('seeding carts...');
+	await Cart.insertMany(seedData.carts);
 
 	const counts = {
 		products: await Product.countDocuments(),
