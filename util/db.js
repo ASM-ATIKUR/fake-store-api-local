@@ -41,7 +41,7 @@ async function connectToDatabase() {
 		const opts = {
 			useNewUrlParser: true,
 			bufferCommands: false, // Fail immediately if not connected rather than hanging
-			serverSelectionTimeoutMS: 5000, // Fail fast (5s) instead of hanging 30s
+			serverSelectionTimeoutMS: 15000, // 15s timeout for reliable connection over internet
 			...(process.env.DB_NAME ? { dbName: process.env.DB_NAME } : {}),
 		};
 
