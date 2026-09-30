@@ -25,7 +25,10 @@ module.exports.getAllProducts = (req, res) => {
 		.then((products) => {
 			res.json(products);
 		})
-		.catch((err) => console.log(err));
+		.catch((err) => {
+			console.error(err);
+			res.status(500).json({ status: 'error', message: err.message });
+		});
 };
 
 module.exports.getProduct = (req, res) => {
@@ -38,7 +41,10 @@ module.exports.getProduct = (req, res) => {
 		.then((product) => {
 			res.json(product);
 		})
-		.catch((err) => console.log(err));
+		.catch((err) => {
+			console.error(err);
+			res.status(500).json({ status: 'error', message: err.message });
+		});
 };
 
 module.exports.getProductCategories = (req, res) => {
@@ -46,7 +52,10 @@ module.exports.getProductCategories = (req, res) => {
 		.then((categories) => {
 			res.json(categories);
 		})
-		.catch((err) => console.log(err));
+		.catch((err) => {
+			console.error(err);
+			res.status(500).json({ status: 'error', message: err.message });
+		});
 };
 
 module.exports.getProductsInCategory = (req, res) => {
@@ -57,7 +66,10 @@ module.exports.getProductsInCategory = (req, res) => {
 		.then((products) => {
 			res.json(products);
 		})
-		.catch((err) => console.log(err));
+		.catch((err) => {
+			console.error(err);
+			res.status(500).json({ status: 'error', message: err.message });
+		});
 };
 
 module.exports.addProduct = (req, res) => {

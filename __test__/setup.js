@@ -12,6 +12,8 @@ dotenvExpand.expand(myEnv);
 mongoose.set('useFindAndModify', false);
 mongoose.set('useUnifiedTopology', true);
 
+jest.setTimeout(30000);
+
 beforeAll(async () => {
 	await mongoose.connect(process.env.DATABASE_URL, { useNewUrlParser: true });
 });

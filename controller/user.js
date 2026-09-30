@@ -16,7 +16,10 @@ module.exports.getAllUser = (req, res) => {
 		.then((users) => {
 			res.json(users);
 		})
-		.catch((err) => console.log(err));
+		.catch((err) => {
+			console.error(err);
+			res.status(500).json({ status: 'error', message: err.message });
+		});
 };
 
 module.exports.getUser = (req, res) => {
@@ -33,7 +36,10 @@ module.exports.getUser = (req, res) => {
 		.then((user) => {
 			res.json(user);
 		})
-		.catch((err) => console.log(err));
+		.catch((err) => {
+			console.error(err);
+			res.status(500).json({ status: 'error', message: err.message });
+		});
 };
 
 module.exports.addUser = (req, res) => {
